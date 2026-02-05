@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offlyn</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 320px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-size: 14px;
+      color: #333;
+      background: #fff;
+    }
+    
+    h1 {
+      font-size: 18px;
+      margin-bottom: 16px;
+      color: #1a1a1a;
+    }
+    
+    .section {
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .section:last-child {
+      border-bottom: none;
+    }
+    
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    
+    .toggle-group:last-child {
+      margin-bottom: 0;
+    }
+    
+    label {
+      font-weight: 500;
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: #ccc;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .toggle.active {
+      background: #4CAF50;
+    }
+    
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: white;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .toggle.active::after {
+      transform: translateX(20px);
+    }
+    
+    .status {
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    
+    .status.connected {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .status.disconnected {
+      background: #ffebee;
+      color: #c62828;
+    }
+    
+    .error-text {
+      font-size: 12px;
+      color: #c62828;
+      margin-top: 4px;
+      word-break: break-word;
+    }
+    
+    .job-info {
+      padding: 8px 12px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    
+    .job-info-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #1a1a1a;
+    }
+    
+    .job-info-meta {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    .job-info-empty {
+      color: #999;
+      font-style: italic;
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-setup {
+      background: #2196F3;
+      color: white;
+    }
+    
+    .btn-setup:hover {
+      background: #1976D2;
+    }
+    
+    .btn-setup:active {
+      background: #0D47A1;
+    }
+    
+    .summary-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .summary-count {
+      font-size: 13px;
+      color: #666;
+      padding: 8px 12px;
+      background: #f5f5f5;
+      border-radius: 4px;
+    }
+    
+    .summary-count strong {
+      color: #1a1a1a;
+      font-weight: 600;
+    }
+    
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    
+    .btn-primary {
+      background: #2196F3;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #1976D2;
+    }
+    
+    .btn-primary:active {
+      background: #0D47A1;
+    }
+    
+    .btn-primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .summary-status {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      text-align: center;
+    }
+    
+    .summary-status.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .summary-status.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <h1>Offlyn</h1>
+  
+  <div class="section">
+    <button class="btn btn-setup" id="setup-profile-btn">
+      Setup Profile
+    </button>
+  </div>
+  
+  <div class="section">
+    <div class="toggle-group">
+      <label for="enabled-toggle">Enabled</label>
+      <div class="toggle" id="enabled-toggle"></div>
+    </div>
+    <div class="toggle-group">
+      <label for="dryrun-toggle">Dry Run</label>
+      <div class="toggle" id="dryrun-toggle"></div>
+    </div>
+  </div>
+  
+  <div class="section">
+    <div class="status" id="status">
+      Checking connection...
+    </div>
+    <div class="error-text" id="error-text" style="display: none;"></div>
+  </div>
+  
+  <div class="section">
+    <div class="job-info" id="job-info">
+      <div class="job-info-empty">No job detected yet</div>
+    </div>
+  </div>
+  
+  <div class="section">
+    <div class="summary-section">
+      <div class="summary-count" id="summary-count">
+        Loading today's applications...
+      </div>
+      <button class="btn btn-primary" id="copy-summary-btn">
+        📋 Copy Summary
+      </button>
+      <div class="summary-status" id="summary-status" style="display: none;"></div>
+      <textarea id="summary-text" style="width: 100%; height: 200px; margin-top: 8px; padding: 8px; font-family: monospace; font-size: 12px; display: none; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

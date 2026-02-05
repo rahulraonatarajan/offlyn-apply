@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offlyn - Onboarding</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 600px;
+      width: 100%;
+      overflow: hidden;
+    }
+    
+    .header {
+      background: #667eea;
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+    
+    .header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+    
+    .content {
+      padding: 40px;
+    }
+    
+    .step {
+      display: none;
+    }
+    
+    .step.active {
+      display: block;
+      animation: fadeIn 0.3s;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .upload-area {
+      border: 2px dashed #ddd;
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .upload-area:hover {
+      border-color: #667eea;
+      background: #f8f9ff;
+    }
+    
+    .upload-area.dragging {
+      border-color: #667eea;
+      background: #f0f3ff;
+    }
+    
+    .upload-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      color: #667eea;
+    }
+    
+    .upload-text {
+      font-size: 16px;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    
+    .upload-hint {
+      font-size: 13px;
+      color: #999;
+    }
+    
+    input[type="file"] {
+      display: none;
+    }
+    
+    .file-info {
+      display: none;
+      background: #f8f9ff;
+      padding: 16px;
+      border-radius: 8px;
+      margin-top: 16px;
+    }
+    
+    .file-info.visible {
+      display: block;
+    }
+    
+    .file-name {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 4px;
+    }
+    
+    .file-size {
+      font-size: 13px;
+      color: #666;
+    }
+    
+    .status {
+      margin-top: 20px;
+      padding: 12px 16px;
+      border-radius: 6px;
+      display: none;
+    }
+    
+    .status.visible {
+      display: block;
+    }
+    
+    .status.info {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+    
+    .status.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .status.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+    
+    .error-details {
+      margin-top: 16px;
+      padding: 16px;
+      background: #fff3e0;
+      border-left: 4px solid #f57c00;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    
+    .error-details h4 {
+      color: #e65100;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    
+    .error-details pre {
+      background: #fff;
+      padding: 8px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+      margin: 8px 0;
+      border: 1px solid #ffe0b2;
+    }
+    
+    .error-details ul {
+      margin: 8px 0 8px 20px;
+    }
+    
+    .error-details li {
+      margin: 4px 0;
+      color: #666;
+    }
+    
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    
+    .connection-status.connected {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    
+    .connection-status.disconnected {
+      background: #ffebee;
+      color: #c62828;
+    }
+    
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    
+    .status-indicator.connected {
+      background: #4caf50;
+    }
+    
+    .status-indicator.disconnected {
+      background: #f44336;
+    }
+    
+    .profile-preview {
+      margin-top: 24px;
+    }
+    
+    .profile-section {
+      margin-bottom: 24px;
+    }
+    
+    .profile-section h3 {
+      font-size: 16px;
+      color: #667eea;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    
+    .profile-field {
+      display: flex;
+      margin-bottom: 12px;
+      font-size: 14px;
+      align-items: flex-start;
+    }
+    
+    .profile-label {
+      font-weight: 600;
+      color: #666;
+      width: 140px;
+      flex-shrink: 0;
+      padding-top: 8px;
+    }
+    
+    .profile-value {
+      color: #333;
+      flex: 1;
+    }
+    
+    .profile-input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    
+    .profile-input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .profile-textarea {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+      min-height: 80px;
+      resize: vertical;
+    }
+    
+    .profile-textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .editable-list {
+      flex: 1;
+    }
+    
+    .editable-list-item {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    
+    .editable-list-item input {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    
+    .editable-list-item button {
+      padding: 6px 12px;
+      background: #f44336;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    
+    .editable-list-item button:hover {
+      background: #d32f2f;
+    }
+    
+    .add-item-btn {
+      padding: 6px 12px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    
+    .add-item-btn:hover {
+      background: #5568d3;
+    }
+
+    /* Self-ID Questionnaire Styles */
+    .selfid-intro {
+      font-size: 14px;
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 24px;
+      padding: 16px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+
+    .question-group {
+      margin-bottom: 28px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .question-group:last-of-type {
+      border-bottom: none;
+    }
+
+    .question-label {
+      display: block;
+      font-weight: 600;
+      font-size: 15px;
+      color: #333;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .checkbox-group,
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .checkbox-group label,
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-size: 14px;
+    }
+
+    .checkbox-group label:hover,
+    .radio-group label:hover {
+      background: #f5f5f5;
+    }
+
+    .checkbox-group input[type="checkbox"],
+    .radio-group input[type="radio"] {
+      margin-right: 10px;
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+      justify-content: flex-end;
+    }
+
+    .btn-secondary {
+      background: #e0e0e0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #d0d0d0;
+    }
+
+    .required {
+      color: #f44336;
+      font-weight: bold;
+      margin-left: 2px;
+    }
+    
+    .skills-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    
+    .skill-tag {
+      background: #e3f2fd;
+      color: #1976d2;
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 13px;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 32px;
+    }
+    
+    .btn {
+      flex: 1;
+      padding: 14px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+    
+    .btn-primary:hover:not(:disabled) {
+      background: #5568d3;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+    }
+    
+    .btn-secondary {
+      background: #f5f5f5;
+      color: #666;
+    }
+    
+    .btn-secondary:hover:not(:disabled) {
+      background: #e0e0e0;
+    }
+    
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .progress-container {
+      display: none;
+      margin-top: 24px;
+    }
+    
+    .progress-container.visible {
+      display: block;
+      animation: fadeIn 0.3s;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #f0f0f0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    
+    .progress-text {
+      font-size: 14px;
+      color: #666;
+      text-align: center;
+    }
+    
+    .progress-stages {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 16px;
+      font-size: 12px;
+    }
+    
+    .progress-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      color: #999;
+      flex: 1;
+    }
+    
+    .progress-stage.active {
+      color: #667eea;
+      font-weight: 600;
+    }
+    
+    .progress-stage.completed {
+      color: #4caf50;
+    }
+    
+    .stage-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #f5f5f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    
+    .progress-stage.active .stage-icon {
+      background: #e3f2fd;
+      color: #667eea;
+    }
+    
+    .progress-stage.completed .stage-icon {
+      background: #e8f5e9;
+      color: #4caf50;
+    }
+    
+    .raw-data-section {
+      margin-top: 24px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .raw-data-header {
+      background: #f5f5f5;
+      padding: 12px 16px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    
+    .raw-data-header:hover {
+      background: #eeeeee;
+    }
+    
+    .raw-data-header h4 {
+      font-size: 14px;
+      color: #666;
+      margin: 0;
+    }
+    
+    .raw-data-toggle {
+      font-size: 12px;
+      color: #999;
+    }
+    
+    .raw-data-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    
+    .raw-data-content.expanded {
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    
+    .raw-data-json {
+      background: #f9f9f9;
+      padding: 16px;
+      margin: 0;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: #333;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Welcome to Offlyn</h1>
+      <p>Upload your resume to get started with automated job applications</p>
+    </div>
+    
+    <div class="content">
+      <!-- Step 1: Upload Resume -->
+      <div id="step-upload" class="step active">
+        <div class="connection-status" id="connectionStatus">
+          <span class="status-indicator"></span>
+          <span>Checking connection...</span>
+        </div>
+        
+        <div class="upload-area" id="uploadArea">
+          <div class="upload-icon">[+]</div>
+          <div class="upload-text">Drop your resume here or click to browse</div>
+          <div class="upload-hint">Supports PDF, DOC, DOCX, TXT (Max 5MB)</div>
+          <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt">
+        </div>
+        
+        <div class="file-info" id="fileInfo">
+          <div class="file-name" id="fileName"></div>
+          <div class="file-size" id="fileSize"></div>
+        </div>
+        
+        <div class="status" id="uploadStatus"></div>
+        <div id="errorDetails"></div>
+        
+        <!-- Progress Bar -->
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-text" id="progressText">Preparing...</div>
+          
+          <div class="progress-stages">
+            <div class="progress-stage" id="stage-read">
+              <div class="stage-icon">1</div>
+              <span>Reading File</span>
+            </div>
+            <div class="progress-stage" id="stage-extract">
+              <div class="stage-icon">2</div>
+              <span>Extracting Text</span>
+            </div>
+            <div class="progress-stage" id="stage-parse">
+              <div class="stage-icon">3</div>
+              <span>AI Parsing</span>
+            </div>
+            <div class="progress-stage" id="stage-done">
+              <div class="stage-icon">4</div>
+              <span>Complete</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="button-group">
+          <button class="btn btn-secondary" id="skipUploadBtn">Skip & Enter Manually</button>
+          <button class="btn btn-primary" id="parseBtn" disabled>Parse Resume</button>
+        </div>
+      </div>
+      
+      <!-- Step 2: Manual Data Entry / Review Extracted Data -->
+      <div id="step-review" class="step">
+        <h2 style="margin-bottom: 16px;">Your Profile Information</h2>
+        <p style="color: #666; margin-bottom: 24px;">Fill in your information to auto-fill job applications.</p>
+        
+        <div class="profile-preview" id="profilePreview"></div>
+        
+        <!-- Raw JSON Data (Collapsible) -->
+        <div class="raw-data-section">
+          <div class="raw-data-header" id="rawDataToggle">
+            <h4>View Raw Parsed Data</h4>
+            <span class="raw-data-toggle">[+] Show</span>
+          </div>
+          <div class="raw-data-content" id="rawDataContent">
+            <pre class="raw-data-json" id="rawDataJson"></pre>
+          </div>
+        </div>
+        
+        <div class="button-group">
+          <button class="btn btn-secondary" id="backBtn">Back</button>
+          <button class="btn btn-primary" id="saveBtn">Save & Continue</button>
+        </div>
+      </div>
+      
+      <!-- Step 3: Self-ID (Optional) -->
+      <div id="step-selfid" class="step">
+        <h2>Self-Identification (Optional)</h2>
+        <p class="selfid-intro">We invite you to share some information about yourself. This information has no impact on applications and is kept confidential. It's used at an aggregate level to ensure equal opportunity. All questions are optional.</p>
+        
+        <form id="selfIdForm">
+          <!-- Gender Identity -->
+          <div class="question-group">
+            <label class="question-label">Which gender identities do you most identify with? (Select all that apply)</label>
+            <div class="checkbox-group">
+              <label><input type="checkbox" name="gender" value="Agender"> Agender</label>
+              <label><input type="checkbox" name="gender" value="Gender non-conforming"> Gender non-conforming</label>
+              <label><input type="checkbox" name="gender" value="Genderfluid"> Genderfluid</label>
+              <label><input type="checkbox" name="gender" value="Genderqueer"> Genderqueer</label>
+              <label><input type="checkbox" name="gender" value="I choose not to disclose"> I choose not to disclose</label>
+              <label><input type="checkbox" name="gender" value="Man"> Man</label>
+              <label><input type="checkbox" name="gender" value="Non-binary"> Non-binary</label>
+              <label><input type="checkbox" name="gender" value="Not Listed"> Not Listed</label>
+              <label><input type="checkbox" name="gender" value="Woman"> Woman</label>
+            </div>
+          </div>
+
+          <!-- Race/Ethnicity -->
+          <div class="question-group">
+            <label class="question-label">Which race or ethnicity best describes you? (Select all that apply)</label>
+            <div class="checkbox-group">
+              <label><input type="checkbox" name="race" value="American Indian or Alaskan Native"> American Indian or Alaskan Native</label>
+              <label><input type="checkbox" name="race" value="Asian"> Asian</label>
+              <label><input type="checkbox" name="race" value="Black or African American"> Black or African American</label>
+              <label><input type="checkbox" name="race" value="Hispanic or Latinx"> Hispanic or Latinx</label>
+              <label><input type="checkbox" name="race" value="I choose not to disclose"> I choose not to disclose</label>
+              <label><input type="checkbox" name="race" value="Middle Eastern or North African"> Middle Eastern or North African</label>
+              <label><input type="checkbox" name="race" value="Native Hawaiian or Other Pacific Islander"> Native Hawaiian or Other Pacific Islander</label>
+              <label><input type="checkbox" name="race" value="White"> White</label>
+            </div>
+          </div>
+
+          <!-- Sexual Orientation -->
+          <div class="question-group">
+            <label class="question-label">Which sexual orientations do you most identify with? (Select all that apply)</label>
+            <div class="checkbox-group">
+              <label><input type="checkbox" name="orientation" value="Asexual"> Asexual</label>
+              <label><input type="checkbox" name="orientation" value="Bisexual"> Bisexual</label>
+              <label><input type="checkbox" name="orientation" value="Gay"> Gay</label>
+              <label><input type="checkbox" name="orientation" value="Heterosexual"> Heterosexual</label>
+              <label><input type="checkbox" name="orientation" value="I choose not to disclose"> I choose not to disclose</label>
+              <label><input type="checkbox" name="orientation" value="Lesbian"> Lesbian</label>
+              <label><input type="checkbox" name="orientation" value="Not Listed"> Not Listed</label>
+              <label><input type="checkbox" name="orientation" value="Pansexual"> Pansexual</label>
+              <label><input type="checkbox" name="orientation" value="Queer"> Queer</label>
+            </div>
+          </div>
+
+          <!-- Veteran Status -->
+          <div class="question-group">
+            <label class="question-label">Are you a US veteran?</label>
+            <div class="radio-group">
+              <label><input type="radio" name="veteran" value="Not a veteran"> Not a veteran</label>
+              <label><input type="radio" name="veteran" value="Veteran"> Veteran</label>
+              <label><input type="radio" name="veteran" value="Protected veteran"> Protected veteran</label>
+              <label><input type="radio" name="veteran" value="I choose not to disclose"> I choose not to disclose</label>
+            </div>
+          </div>
+
+          <!-- Transgender Experience -->
+          <div class="question-group">
+            <label class="question-label">Are you a person of transgender experience?</label>
+            <div class="radio-group">
+              <label><input type="radio" name="transgender" value="Yes"> Yes</label>
+              <label><input type="radio" name="transgender" value="No"> No</label>
+              <label><input type="radio" name="transgender" value="I choose not to disclose"> I choose not to disclose</label>
+            </div>
+          </div>
+
+          <!-- Disability Status -->
+          <div class="question-group">
+            <label class="question-label">Would you consider yourself to be a person with a disability?</label>
+            <div class="radio-group">
+              <label><input type="radio" name="disability" value="Yes"> Yes</label>
+              <label><input type="radio" name="disability" value="No"> No</label>
+              <label><input type="radio" name="disability" value="I choose not to disclose"> I choose not to disclose</label>
+            </div>
+          </div>
+        </form>
+
+        <div class="button-group">
+          <button id="skipSelfIdBtn" class="btn btn-secondary">Skip</button>
+          <button id="saveSelfIdBtn" class="btn btn-primary">Save & Continue</button>
+        </div>
+      </div>
+      
+      <!-- Step 4: Work Authorization (Optional) -->
+      <div id="step-workauth" class="step">
+        <h2>Work Authorization</h2>
+        <p class="selfid-intro">These questions help us tailor applications to your work eligibility. All questions are optional.</p>
+        
+        <form id="workAuthForm">
+          <!-- US Work Authorization -->
+          <div class="question-group">
+            <label class="question-label">Are you legally authorized to work in the United States?</label>
+            <div class="radio-group">
+              <label><input type="radio" name="legallyAuthorized" value="yes"> Yes</label>
+              <label><input type="radio" name="legallyAuthorized" value="no"> No</label>
+              <label><input type="radio" name="legallyAuthorized" value="prefer-not-to-say"> Prefer not to say</label>
+            </div>
+          </div>
+
+          <!-- Sponsorship Requirement -->
+          <div class="question-group">
+            <label class="question-label">Do you now or will you in the future require sponsorship for employment visa status?</label>
+            <div class="radio-group">
+              <label><input type="radio" name="requiresSponsorship" value="yes"> Yes</label>
+              <label><input type="radio" name="requiresSponsorship" value="no"> No</label>
+              <label><input type="radio" name="requiresSponsorship" value="prefer-not-to-say"> Prefer not to say</label>
+            </div>
+          </div>
+
+          <!-- Current Status (shown if authorized or needs sponsorship) -->
+          <div class="question-group" id="currentStatusGroup" style="display: none;">
+            <label class="question-label">What is your current work authorization status?</label>
+            <select name="currentStatus" id="currentStatus">
+              <option value="">Select...</option>
+              <option value="US Citizen">US Citizen</option>
+              <option value="US Permanent Resident">US Permanent Resident (Green Card)</option>
+              <option value="Employment Authorization Document">Employment Authorization Document (EAD)</option>
+              <option value="H-1B Visa">H-1B Visa</option>
+              <option value="L-1 Visa">L-1 Visa</option>
+              <option value="TN Visa">TN Visa (NAFTA)</option>
+              <option value="O-1 Visa">O-1 Visa</option>
+              <option value="F-1 Student Visa">F-1 Student Visa</option>
+              <option value="OPT">OPT (Optional Practical Training)</option>
+              <option value="CPT">CPT (Curricular Practical Training)</option>
+              <option value="STEM OPT Extension">STEM OPT Extension</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <!-- Visa Type (shown if requires sponsorship) -->
+          <div class="question-group" id="visaTypeGroup" style="display: none;">
+            <label class="question-label">What type of visa sponsorship do you require?</label>
+            <select name="visaType" id="visaType">
+              <option value="">Select...</option>
+              <option value="H-1B">H-1B (Specialty Occupation)</option>
+              <option value="Green Card">Green Card (Permanent Residency)</option>
+              <option value="TN">TN Visa (NAFTA - Canadian/Mexican)</option>
+              <option value="O-1">O-1 (Extraordinary Ability)</option>
+              <option value="L-1">L-1 (Intracompany Transfer)</option>
+              <option value="E-3">E-3 (Australian Specialty Workers)</option>
+              <option value="H-1B1">H-1B1 (Chile/Singapore)</option>
+              <option value="OPT Extension">OPT Extension</option>
+              <option value="STEM OPT Extension">STEM OPT Extension</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <!-- Sponsorship Timeline (shown if requires sponsorship) -->
+          <div class="question-group" id="sponsorshipTimelineGroup" style="display: none;">
+            <label class="question-label">When will you require sponsorship?</label>
+            <select name="sponsorshipTimeline">
+              <option value="">Select...</option>
+              <option value="Immediately">Immediately</option>
+              <option value="Within 3 months">Within 3 months</option>
+              <option value="Within 6 months">Within 6 months</option>
+              <option value="Within 1 year">Within 1 year</option>
+              <option value="More than 1 year">More than 1 year</option>
+              <option value="Uncertain">Uncertain</option>
+            </select>
+          </div>
+        </form>
+
+        <div class="button-group">
+          <button id="skipWorkAuthBtn" class="btn btn-secondary">Skip</button>
+          <button id="saveWorkAuthBtn" class="btn btn-primary">Save & Continue</button>
+        </div>
+      </div>
+
+      <!-- Step 5: Success -->
+      <div id="step-success" class="step">
+        <div style="text-align: center; padding: 40px 0;">
+          <div style="font-size: 64px; margin-bottom: 24px;">[✓]</div>
+          <h2 style="margin-bottom: 16px;">Profile Saved Successfully!</h2>
+          <p style="color: #666; margin-bottom: 32px;">You can now visit job application pages and Offlyn will help you fill forms automatically.</p>
+          
+          <div class="button-group">
+            <button class="btn btn-primary" id="doneBtn">Start Applying</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="onboarding.js"></script>
+</body>
+</html>

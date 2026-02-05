@@ -1,0 +1,46 @@
+{
+  "manifest_version": 2,
+  "name": "Offlyn - Offline Job Application Assistant",
+  "version": "0.1.0",
+  "description": "Offline-first Firefox WebExtension for job application automation",
+  
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+  
+  "permissions": [
+    "storage",
+    "tabs",
+    "<all_urls>",
+    "http://localhost:11434/*",
+    "http://127.0.0.1:11434/*"
+  ],
+  
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  
+  "browser_action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Offlyn"
+  },
+  
+  "content_security_policy": "script-src 'self' https://cdnjs.cloudflare.com; object-src 'self'",
+  
+  "applications": {
+    "gecko": {
+      "id": "{e0857c2d-15a6-4d0c-935e-57761715dc3d}",
+      "strict_min_version": "91.0"
+    }
+  }
+}

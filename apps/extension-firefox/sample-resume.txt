@@ -1,0 +1,51 @@
+JOHN DOE
+Software Engineer
+
+Email: john.doe@email.com
+Phone: +1 (555) 123-4567
+Location: San Francisco, CA
+LinkedIn: https://linkedin.com/in/johndoe
+GitHub: https://github.com/johndoe
+Portfolio: https://johndoe.dev
+
+SUMMARY
+Experienced Full Stack Software Engineer with 5+ years of building scalable web applications. Proficient in JavaScript, Python, and React. Passionate about clean code and user experience.
+
+SKILLS
+JavaScript, TypeScript, Python, React, Node.js, Express, PostgreSQL, MongoDB, AWS, Docker, Git, REST APIs, GraphQL, Agile, TDD
+
+WORK EXPERIENCE
+
+Senior Software Engineer
+Tech Innovations Inc.
+January 2021 - Present
+- Led development of microservices architecture serving 1M+ users
+- Improved application performance by 40% through optimization
+- Mentored 3 junior developers and conducted code reviews
+- Implemented CI/CD pipelines reducing deployment time by 60%
+
+Software Engineer
+StartupXYZ
+June 2019 - December 2020
+- Built full-stack web applications using React and Node.js
+- Designed and implemented RESTful APIs
+- Collaborated with product team to define feature requirements
+- Wrote unit and integration tests achieving 85% code coverage
+
+Junior Developer
+Digital Solutions Co.
+August 2018 - May 2019
+- Developed responsive web interfaces using HTML, CSS, JavaScript
+- Fixed bugs and improved existing codebase
+- Participated in daily standups and sprint planning
+
+EDUCATION
+
+Bachelor of Science in Computer Science
+University of California, Berkeley
+Graduated: May 2018
+GPA: 3.7/4.0
+
+CERTIFICATIONS
+- AWS Certified Developer Associate (2022)
+- MongoDB Certified Developer (2021)

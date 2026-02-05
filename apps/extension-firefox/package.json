@@ -1,0 +1,27 @@
+{
+  "name": "offlyn-firefox-extension",
+  "version": "0.1.0",
+  "description": "Offline-first Firefox WebExtension for job application automation",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --watch",
+    "run:firefox": "web-ext run --source-dir dist",
+    "lint": "echo 'Linting not configured'"
+  },
+  "keywords": [
+    "firefox",
+    "webextension",
+    "job-application",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/firefox-webextension-browser": "^6.0.7",
+    "@types/node": "^20.10.0",
+    "esbuild": "^0.19.8",
+    "typescript": "^5.3.3",
+    "web-ext": "^7.8.0"
+  }
+}
