@@ -5,7 +5,7 @@
 import type { ApplyEvent, FillPlan, FillResult, JobMeta, FieldSchema } from './shared/types';
 import { extractJobMetadata, extractFormSchema, isJobApplicationPage } from './shared/dom';
 import { log, info, warn, error } from './shared/log';
-import { showFieldSummary, hideFieldSummary } from './ui/field-summary';
+import { showFieldSummary, hideFieldSummary, ensureFieldSummaryExpanded } from './ui/field-summary';
 import { getUserProfile, type UserProfile } from './shared/profile';
 import { generateFillMappings } from './shared/autofill';
 import { 
@@ -765,18 +765,54 @@ window.addEventListener('offlyn-browser-use-fill', () => {
   }
 });
 
+// ── Cover letter state ──────────────────────────────────────────────────────
+let coverLetterGenerating = false;
+let lastCoverLetterResult: { text: string; jobTitle: string; company: string; generatedAt: number } | null = null;
+let lastCoverLetterAutoApplySelector: string | null = null;
+
 /**
- * Listen for cover letter generation trigger
+ * Listen for cover letter generation trigger.
+ * If a letter was already generated, just re-open the panel with the cached result.
+ * If generation is already in progress, just re-show the panel (no duplicate work).
  */
 window.addEventListener('offlyn-generate-cover-letter', () => {
+  if (coverLetterGenerating) {
+    // Already generating — just make sure panel is visible
+    if (!isCoverLetterPanelVisible()) {
+      const title = lastJobMeta?.jobTitle || 'Position';
+      const company = lastJobMeta?.company || 'Company';
+      const autoApply = lastCoverLetterAutoApplySelector
+        ? (text: string) => applyCoverLetterToField(lastCoverLetterAutoApplySelector!, text)
+        : undefined;
+      openCoverLetterPanel(title, company, autoApply);
+    }
+    return;
+  }
+
+  if (lastCoverLetterResult) {
+    // Already have a result — re-open panel showing the cached letter
+    reopenCoverLetterWithResult();
+    return;
+  }
+
   triggerCoverLetterGeneration();
 });
 
 /**
- * Listen for cover letter regeneration (from the panel's "Regenerate" button)
+ * Listen for cover letter regeneration (from the panel's "Regenerate" button).
+ * Always forces a fresh generation, clearing the cache.
  */
 window.addEventListener('offlyn-regenerate-cover-letter', () => {
+  lastCoverLetterResult = null;
   triggerCoverLetterGeneration();
+});
+
+/**
+ * When user presses back from cover letter panel, expand the field summary
+ * and keep it expanded (no auto-minimize).
+ */
+window.addEventListener('offlyn-cover-letter-back', () => {
+  ensureFieldSummaryExpanded();
 });
 
 /**
@@ -796,12 +832,14 @@ window.addEventListener('offlyn-refine-cover-letter', async (e: Event) => {
       (partial) => updateCoverLetterPreview(partial),
     );
 
-    showCoverLetterResult({
+    const refinedResult = {
       text: refined,
       jobTitle: lastJobMeta?.jobTitle || '',
       company: lastJobMeta?.company || '',
       generatedAt: Date.now(),
-    });
+    };
+    lastCoverLetterResult = refinedResult;
+    showCoverLetterResult(refinedResult);
 
     showSuccess('Refined!', `Cover letter has been ${action === 'impactful' ? 'made more impactful' : action + 'ed'}.`);
   } catch (err: any) {
@@ -814,6 +852,9 @@ window.addEventListener('offlyn-refine-cover-letter', async (e: Event) => {
  * Generate a cover letter using the user's profile and the scraped job description
  */
 async function triggerCoverLetterGeneration(): Promise<void> {
+  if (coverLetterGenerating) return; // prevent double-fire
+  coverLetterGenerating = true;
+
   try {
     // 1. Check Ollama
     const ollamaOk = await checkOllamaConnection();
@@ -839,6 +880,7 @@ async function triggerCoverLetterGeneration(): Promise<void> {
 
     // 4. Detect a cover letter textarea / file input on the page for auto-apply
     const coverLetterField = detectCoverLetterField();
+    lastCoverLetterAutoApplySelector = coverLetterField;
 
     // 5. Open the preview panel
     openCoverLetterPanel(
@@ -852,12 +894,36 @@ async function triggerCoverLetterGeneration(): Promise<void> {
       updateCoverLetterPreview(partial);
     });
 
+    // 7. Cache the result + show it
+    lastCoverLetterResult = result;
     showCoverLetterResult(result);
     showSuccess('Cover Letter Ready', 'Your tailored cover letter has been generated.');
   } catch (err: any) {
     error('Cover letter generation failed:', err);
     showCoverLetterError(err?.message || 'Generation failed. Is Ollama running?');
+  } finally {
+    coverLetterGenerating = false;
   }
+}
+
+/**
+ * Re-open the cover letter panel showing the previously generated letter.
+ */
+function reopenCoverLetterWithResult(): void {
+  if (!lastCoverLetterResult) return;
+
+  const autoApply = lastCoverLetterAutoApplySelector
+    ? (text: string) => applyCoverLetterToField(lastCoverLetterAutoApplySelector!, text)
+    : undefined;
+
+  openCoverLetterPanel(
+    lastCoverLetterResult.jobTitle || 'Position',
+    lastCoverLetterResult.company || 'Company',
+    autoApply,
+  );
+
+  // Immediately show the cached result (skip generating state)
+  showCoverLetterResult(lastCoverLetterResult);
 }
 
 /**
@@ -3248,6 +3314,8 @@ async function init(): Promise<void> {
       // Clear tracking for new page
       userEditedFields.clear();
       filledSelectors.clear();
+      lastCoverLetterResult = null;
+      lastCoverLetterAutoApplySelector = null;
       
       // Re-detect after navigation
       setTimeout(detectPage, 500);
@@ -3280,6 +3348,8 @@ async function init(): Promise<void> {
     info('Navigation detected (back/forward), re-scanning...');
     userEditedFields.clear();
     filledSelectors.clear();
+    lastCoverLetterResult = null;
+    lastCoverLetterAutoApplySelector = null;
     setTimeout(detectPage, 500);
   });
   

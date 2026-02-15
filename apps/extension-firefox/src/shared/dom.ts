@@ -777,7 +777,11 @@ export function extractJobMetadata(): JobMeta {
 }
 
 /**
- * Check if page likely contains a job application flow
+ * Check if page likely contains a job application flow.
+ *
+ * Uses a scoring system so a single weak signal (e.g. a /careers URL or a form
+ * with 3 fields) is not enough by itself.  Known ATS hostnames are still an
+ * instant match because they virtually never give false positives.
  */
 export function isJobApplicationPage(): boolean {
   const url = window.location.href.toLowerCase();
@@ -786,8 +790,8 @@ export function isJobApplicationPage(): boolean {
   console.log('[Offlyn Detection] Checking URL:', url);
   console.log('[Offlyn Detection] Hostname:', hostname);
   
-  // Known ATS platforms (URL-based detection)
-  const knownATS = [
+  // ── Tier 1: Known ATS hostnames (instant match) ───────────────────────
+  const knownATSHostnames = [
     'greenhouse.io',
     'lever.co',
     'workday.com',
@@ -802,102 +806,121 @@ export function isJobApplicationPage(): boolean {
     'jobvite.com',
     'taleo.net',
     'successfactors.com',
-    'oracle.com/hcm',
     'jazz.co',
     'fountain.com',
     'recruiting.paylocity.com',
     'applytojob.com',
-    'careers-page',
-    '/careers',
-    '/jobs',
-    '/apply',
-    '/application',
   ];
   
-  // Check if URL matches known ATS
-  for (const ats of knownATS) {
-    if (hostname.includes(ats) || url.includes(ats)) {
-      console.log('[Offlyn Detection] ✓ Matched known ATS:', ats);
+  for (const ats of knownATSHostnames) {
+    if (hostname.includes(ats)) {
+      console.log('[Offlyn Detection] Tier-1 match (ATS hostname):', ats);
       return true;
     }
   }
-  console.log('[Offlyn Detection] No known ATS match in URL');
   
-  // Check for job-specific URL patterns
+  // ── Tier 2: Scoring system ────────────────────────────────────────────
+  // A page needs at least 3 points to be considered a job application page.
+  // This avoids false positives from a single weak signal.
+  let score = 0;
+  
+  // --- Signal: Job-related URL path (+2) ---
   const jobUrlPatterns = [
-    /\/job[s]?\//i,
-    /\/career[s]?\//i,
-    /\/position[s]?\//i,
-    /\/opening[s]?\//i,
-    /\/application/i,
-    /\/apply/i,
-    /posting/i,
-    /recruitment/i,
-    /publication/i,  // SmartRecruiters uses this!
+    /\/job[s]?\/[^/]+/i,       // /jobs/some-position (not just /jobs/)
+    /\/position[s]?\/[^/]+/i,  // /positions/some-role
+    /\/opening[s]?\/[^/]+/i,   // /openings/some-role
+    /\/apply\b/i,              // /apply
+    /\/application\b/i,        // /application
+    /\/publication\//i,        // SmartRecruiters
   ];
   
-  console.log('[Offlyn Detection] Checking URL patterns...');
   for (const pattern of jobUrlPatterns) {
     if (pattern.test(url)) {
-      console.log('[Offlyn Detection] ✓ Matched URL pattern:', pattern);
-      return true;
+      score += 2;
+      console.log('[Offlyn Detection] +2 URL pattern:', pattern);
+      break;
     }
   }
-  console.log('[Offlyn Detection] No URL pattern match');
   
-  // Check for forms with >= 3 fields (lowered threshold)
+  // --- Signal: Generic career URL path (+1, weaker) ---
+  const weakUrlPatterns = [
+    /\/career[s]?\//i,
+    /\/recruitment\//i,
+  ];
+  if (score === 0) { // Only check if no strong URL match
+    for (const pattern of weakUrlPatterns) {
+      if (pattern.test(url)) {
+        score += 1;
+        console.log('[Offlyn Detection] +1 weak URL pattern:', pattern);
+        break;
+      }
+    }
+  }
+  
+  // --- Signal: Page has a form with enough fields (+2) ---
   const forms = Array.from(document.querySelectorAll('form'));
-  console.log('[Offlyn Detection] Found', forms.length, 'forms');
+  let hasSubstantialForm = false;
   for (const form of forms) {
-    const fields = form.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), select, textarea');
-    console.log('[Offlyn Detection] Form has', fields.length, 'fields');
-    if (fields.length >= 3) {  // Lowered from 4 to 3
-      console.log('[Offlyn Detection] ✓ Form has enough fields');
-      return true;
+    const fields = form.querySelectorAll(
+      'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="search"]):not([type="password"]), select, textarea'
+    );
+    if (fields.length >= 4) {
+      hasSubstantialForm = true;
+      score += 2;
+      console.log('[Offlyn Detection] +2 form with', fields.length, 'fields');
+      break;
     }
   }
   
-  // Check for form fields even without <form> tags (SPA applications)
-  const allFields = document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), select, textarea');
-  console.log('[Offlyn Detection] Found', allFields.length, 'total fields on page');
-  if (allFields.length >= 4) {  // Lowered from 6 to 4
-    console.log('[Offlyn Detection] ✓ Enough fields without form tag');
-    return true;
+  // --- Signal: SPA form fields without <form> tags (+1) ---
+  if (!hasSubstantialForm) {
+    const allFields = document.querySelectorAll(
+      'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="search"]):not([type="password"]), select, textarea'
+    );
+    if (allFields.length >= 6) {
+      score += 1;
+      console.log('[Offlyn Detection] +1 loose fields:', allFields.length);
+    }
   }
   
-  // Check for apply/submit buttons/links
-  const applyPattern = /apply|submit application|submit your|continue to apply|start application|begin application/i;
-  const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], a[role="button"], [class*="apply"], [class*="submit"]'));
-  console.log('[Offlyn Detection] Found', buttons.length, 'buttons');
+  // --- Signal: Apply/submit button present (+1) ---
+  const applyPattern = /\bapply\b|submit application|submit your application|continue to apply|start application|begin application/i;
+  const buttons = Array.from(document.querySelectorAll('button, input[type="submit"], a[role="button"]'));
   for (const btn of buttons) {
-    const text = getVisibleText(btn) || btn.className || '';
+    const text = getVisibleText(btn) || '';
     if (applyPattern.test(text)) {
-      console.log('[Offlyn Detection] ✓ Found apply button:', text.substring(0, 50));
-      return true;
+      score += 1;
+      console.log('[Offlyn Detection] +1 apply button:', text.substring(0, 50));
+      break;
     }
   }
   
-  // Check for job-specific content indicators
+  // --- Signal: Job-application-specific content (+1) ---
   const bodyText = document.body.textContent?.toLowerCase() || '';
-  const jobIndicators = [
+  const strongJobIndicators = [
     'apply for this position',
     'submit your application',
     'start your application',
-    'job application',
     'upload resume',
     'upload cv',
-    'apply now',
-    'submit application',
+    'cover letter',
   ];
   
-  console.log('[Offlyn Detection] Checking page content for job indicators...');
-  for (const indicator of jobIndicators) {
+  for (const indicator of strongJobIndicators) {
     if (bodyText.includes(indicator)) {
-      console.log('[Offlyn Detection] ✓ Found job indicator:', indicator);
-      return true;
+      score += 1;
+      console.log('[Offlyn Detection] +1 content indicator:', indicator);
+      break;
     }
   }
   
-  console.log('[Offlyn Detection] ✗ No detection criteria matched');
+  console.log('[Offlyn Detection] Final score:', score, '(need >= 3)');
+  
+  if (score >= 3) {
+    console.log('[Offlyn Detection] Page IS a job application page');
+    return true;
+  }
+  
+  console.log('[Offlyn Detection] Page is NOT a job application page');
   return false;
 }

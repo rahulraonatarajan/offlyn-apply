@@ -56,14 +56,15 @@ function updateUI(): void {
 async function updateStats(): Promise<void> {
   try {
     const summary = await getTodayApplications();
-    const total = summary.applications.length;
-    const submitted = summary.applications.filter(a => a.status === 'submitted').length;
-    const detected = total - submitted;
+    // Only count non-detected applications (tracked applications)
+    const trackedApps = summary.applications.filter(a => a.status !== 'detected');
+    const total = trackedApps.length;
+    const interviewing = trackedApps.filter(a => a.status === 'interviewing').length;
 
-    const subEl = document.getElementById('stat-submitted');
-    const detEl = document.getElementById('stat-detected');
-    if (subEl) subEl.textContent = String(submitted);
-    if (detEl) detEl.textContent = String(detected);
+    const totalEl = document.getElementById('stat-total');
+    const interviewingEl = document.getElementById('stat-interviewing');
+    if (totalEl) totalEl.textContent = String(total);
+    if (interviewingEl) interviewingEl.textContent = String(interviewing);
   } catch (err) {
     error('Failed to update stats:', err);
   }
@@ -115,6 +116,12 @@ async function init(): Promise<void> {
   // ── Manage Profile (single button → onboarding page) ──
   document.getElementById('profile-btn')?.addEventListener('click', () => {
     browser.tabs.create({ url: browser.runtime.getURL('onboarding/onboarding.html') });
+    window.close();
+  });
+
+  // ── View Dashboard ──
+  document.getElementById('view-dashboard-btn')?.addEventListener('click', () => {
+    browser.tabs.create({ url: browser.runtime.getURL('dashboard/dashboard.html') });
     window.close();
   });
 

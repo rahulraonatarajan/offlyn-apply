@@ -233,18 +233,18 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
       tabJobInfo.set(tabId, jobInfo);
       await setTabJobInfo(tabId, jobInfo);
       
-      // Track application for daily summary
-      if (event.jobMeta.jobTitle && event.jobMeta.company) {
+      // Track application for daily summary - ONLY on actual submission, not detection
+      if (event.eventType === 'SUBMIT_ATTEMPT' && event.jobMeta.jobTitle && event.jobMeta.company) {
         const app: JobApplication = {
           jobTitle: event.jobMeta.jobTitle,
           company: event.jobMeta.company,
           url: event.jobMeta.url,
           atsHint: event.jobMeta.atsHint,
           timestamp: Date.now(),
-          status: event.eventType === 'SUBMIT_ATTEMPT' ? 'submitted' : 'detected',
+          status: 'submitted',
         };
         await addJobApplication(app);
-        log(`Tracked ${app.status} application:`, app.jobTitle, 'at', app.company);
+        log(`Tracked submitted application:`, app.jobTitle, 'at', app.company);
       }
       
       return;

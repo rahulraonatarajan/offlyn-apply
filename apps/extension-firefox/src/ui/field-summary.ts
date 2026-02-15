@@ -92,7 +92,7 @@ function minimizePanel(): void {
   if (cube) cube.style.display = 'flex';
 }
 
-function expandPanel(): void {
+function expandPanel(autoMin = true): void {
   if (!summaryPanel || !isMinimized) return;
   isMinimized = false;
 
@@ -108,8 +108,23 @@ function expandPanel(): void {
   if (header) header.style.display = '';
   if (cube) cube.style.display = 'none';
 
-  // Auto-minimize again after 5 seconds when re-expanded
-  scheduleAutoMinimize();
+  if (autoMin) {
+    // Auto-minimize again after 5 seconds when re-expanded by user click
+    scheduleAutoMinimize();
+  }
+}
+
+/**
+ * Ensure the field summary is expanded and keep it expanded (no auto-minimize).
+ * Used when returning from sub-panels like the cover letter panel.
+ */
+export function ensureFieldSummaryExpanded(): void {
+  clearAutoMinTimer();
+  if (summaryPanel && isMinimized) {
+    expandPanel(false);
+  }
+  // Even if already expanded, cancel any pending auto-minimize
+  clearAutoMinTimer();
 }
 
 // ── HTML ───────────────────────────────────────────────────────────────────

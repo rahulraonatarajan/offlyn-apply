@@ -97,7 +97,9 @@ export interface JobApplication {
   url: string;
   atsHint: string | null;
   timestamp: number;
-  status: 'detected' | 'submitted';
+  status: 'detected' | 'submitted' | 'interviewing' | 'rejected' | 'accepted' | 'withdrawn';
+  notes?: string; // Optional notes for tracking
+  id?: string; // Unique identifier for updates/deletes
 }
 
 export interface DailySummary {

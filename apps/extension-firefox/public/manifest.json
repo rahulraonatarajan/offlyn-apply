@@ -38,7 +38,7 @@
     "default_title": "Offlyn"
   },
   
-  "content_security_policy": "script-src 'self' https://cdnjs.cloudflare.com; object-src 'self'",
+  "content_security_policy": "script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; object-src 'self'",
   
   "applications": {
     "gecko": {

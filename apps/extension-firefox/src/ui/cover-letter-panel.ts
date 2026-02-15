@@ -177,10 +177,13 @@ function render(): void {
 
   // ── Listeners ──────────────────────────────────────────────────────────
 
-  // Back button — close panel, return to field summary
-  panel.querySelector('.ocl-back')?.addEventListener('click', () => hideCoverLetterPanel());
+  // Back button — close panel, signal content.ts to expand field summary
+  panel.querySelector('.ocl-back')?.addEventListener('click', () => {
+    hideCoverLetterPanel();
+    window.dispatchEvent(new CustomEvent('offlyn-cover-letter-back'));
+  });
 
-  // Close button — same behavior
+  // Close button — just close, no back navigation
   panel.querySelector('.ocl-close')?.addEventListener('click', () => hideCoverLetterPanel());
 
   // ESC

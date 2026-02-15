@@ -158,3 +158,255 @@ export function generateSummaryMessage(summary: DailySummary): string {
   
   return message;
 }
+
+/**
+ * Get all job applications from all historical daily summaries
+ * Aggregates all dailySummary_* keys into a single array
+ * Filters OUT 'detected' status applications (only submitted and tracked applications)
+ */
+export async function getAllApplications(): Promise<JobApplication[]> {
+  try {
+    const allData = await browser.storage.local.get(null);
+    const applications: JobApplication[] = [];
+    
+    // Filter keys that match dailySummary_YYYY-MM-DD pattern
+    for (const key in allData) {
+      if (key.startsWith('dailySummary_')) {
+        const summary = allData[key] as DailySummary;
+        if (summary.applications && Array.isArray(summary.applications)) {
+          // Add unique ID if missing
+          const appsWithIds = summary.applications.map(app => ({
+            ...app,
+            id: app.id || `${app.url}_${app.timestamp}`,
+          }));
+          applications.push(...appsWithIds);
+        }
+      }
+    }
+    
+    // Filter out 'detected' status (only show submitted and tracked applications)
+    const filteredApps = applications.filter(a => a.status !== 'detected');
+    
+    // Sort by timestamp (newest first)
+    return filteredApps.sort((a, b) => b.timestamp - a.timestamp);
+  } catch (err) {
+    console.error('Failed to get all applications:', err);
+    return [];
+  }
+}
+
+/**
+ * Update an application's status and notes
+ * Searches through all daily summaries to find and update the application
+ */
+export async function updateApplicationStatus(
+  appId: string,
+  newStatus: JobApplication['status'],
+  notes?: string
+): Promise<boolean> {
+  try {
+    const allData = await browser.storage.local.get(null);
+    
+    // Find the application across all daily summaries
+    for (const key in allData) {
+      if (key.startsWith('dailySummary_')) {
+        const summary = allData[key] as DailySummary;
+        const appIndex = summary.applications.findIndex(
+          a => (a.id || `${a.url}_${a.timestamp}`) === appId
+        );
+        
+        if (appIndex !== -1) {
+          // Update the application
+          summary.applications[appIndex] = {
+            ...summary.applications[appIndex],
+            status: newStatus,
+            notes: notes !== undefined ? notes : summary.applications[appIndex].notes,
+            id: appId,
+          };
+          
+          // Save back to storage
+          await browser.storage.local.set({ [key]: summary });
+          return true;
+        }
+      }
+    }
+    
+    console.warn('Application not found for update:', appId);
+    return false;
+  } catch (err) {
+    console.error('Failed to update application status:', err);
+    return false;
+  }
+}
+
+/**
+ * Delete an application from storage
+ * Searches through all daily summaries to find and remove the application
+ */
+export async function deleteApplication(appId: string): Promise<boolean> {
+  try {
+    const allData = await browser.storage.local.get(null);
+    
+    // Find and delete the application from all daily summaries
+    for (const key in allData) {
+      if (key.startsWith('dailySummary_')) {
+        const summary = allData[key] as DailySummary;
+        const originalLength = summary.applications.length;
+        
+        // Filter out the application
+        summary.applications = summary.applications.filter(
+          a => (a.id || `${a.url}_${a.timestamp}`) !== appId
+        );
+        
+        if (summary.applications.length < originalLength) {
+          // Application was found and removed
+          await browser.storage.local.set({ [key]: summary });
+          return true;
+        }
+      }
+    }
+    
+    console.warn('Application not found for deletion:', appId);
+    return false;
+  } catch (err) {
+    console.error('Failed to delete application:', err);
+    return false;
+  }
+}
+
+/**
+ * Get summary statistics for all applications
+ */
+export interface ApplicationStats {
+  total: number;
+  submitted: number;
+  interviewing: number;
+  rejected: number;
+  accepted: number;
+  withdrawn: number;
+  responseRate: number; // Percentage of applications that got interview/accept/reject (0-100)
+  uniqueCompanies: number;
+  dateRange: {
+    earliest: string | null;
+    latest: string | null;
+  };
+}
+
+export async function getApplicationStats(): Promise<ApplicationStats> {
+  try {
+    const applications = await getAllApplications(); // Already filters out 'detected'
+    
+    if (applications.length === 0) {
+      return {
+        total: 0,
+        submitted: 0,
+        interviewing: 0,
+        rejected: 0,
+        accepted: 0,
+        withdrawn: 0,
+        responseRate: 0,
+        uniqueCompanies: 0,
+        dateRange: { earliest: null, latest: null },
+      };
+    }
+    
+    const submitted = applications.filter(a => a.status === 'submitted').length;
+    const interviewing = applications.filter(a => a.status === 'interviewing').length;
+    const rejected = applications.filter(a => a.status === 'rejected').length;
+    const accepted = applications.filter(a => a.status === 'accepted').length;
+    const withdrawn = applications.filter(a => a.status === 'withdrawn').length;
+    
+    // Response rate = applications that got a response (interviewing, rejected, accepted)
+    const responded = interviewing + rejected + accepted;
+    const responseRate = applications.length > 0 ? (responded / applications.length) * 100 : 0;
+    
+    // Get unique companies
+    const companies = new Set(applications.map(a => a.company));
+    
+    // Get date range (applications are sorted by timestamp)
+    const timestamps = applications.map(a => a.timestamp).sort((a, b) => a - b);
+    const earliest = timestamps.length > 0 ? new Date(timestamps[0]).toISOString().split('T')[0] : null;
+    const latest = timestamps.length > 0 ? new Date(timestamps[timestamps.length - 1]).toISOString().split('T')[0] : null;
+    
+    return {
+      total: applications.length,
+      submitted,
+      interviewing,
+      rejected,
+      accepted,
+      withdrawn,
+      responseRate: Math.round(responseRate * 10) / 10, // Round to 1 decimal
+      uniqueCompanies: companies.size,
+      dateRange: { earliest, latest },
+    };
+  } catch (err) {
+    console.error('Failed to get application stats:', err);
+    return {
+      total: 0,
+      submitted: 0,
+      interviewing: 0,
+      rejected: 0,
+      accepted: 0,
+      withdrawn: 0,
+      responseRate: 0,
+      uniqueCompanies: 0,
+      dateRange: { earliest: null, latest: null },
+    };
+  }
+}
+
+/**
+ * Get application trends for time-series charts
+ * Returns data grouped by date (excludes 'detected' applications)
+ */
+export interface DailyTrend {
+  date: string; // YYYY-MM-DD
+  total: number;
+  submitted: number;
+  interviewing: number;
+  rejected: number;
+  accepted: number;
+  withdrawn: number;
+}
+
+export async function getApplicationTrends(): Promise<DailyTrend[]> {
+  try {
+    const allData = await browser.storage.local.get(null);
+    const trends: DailyTrend[] = [];
+    
+    // Collect all dailySummary keys and sort them
+    const summaryKeys = Object.keys(allData)
+      .filter(key => key.startsWith('dailySummary_'))
+      .sort(); // Sorts by date naturally (YYYY-MM-DD format)
+    
+    for (const key of summaryKeys) {
+      const summary = allData[key] as DailySummary;
+      
+      // Filter out 'detected' applications
+      const trackedApps = summary.applications.filter(a => a.status !== 'detected');
+      
+      if (trackedApps.length > 0) {
+        const submitted = trackedApps.filter(a => a.status === 'submitted').length;
+        const interviewing = trackedApps.filter(a => a.status === 'interviewing').length;
+        const rejected = trackedApps.filter(a => a.status === 'rejected').length;
+        const accepted = trackedApps.filter(a => a.status === 'accepted').length;
+        const withdrawn = trackedApps.filter(a => a.status === 'withdrawn').length;
+        
+        trends.push({
+          date: summary.date,
+          total: trackedApps.length,
+          submitted,
+          interviewing,
+          rejected,
+          accepted,
+          withdrawn,
+        });
+      }
+    }
+    
+    return trends;
+  } catch (err) {
+    console.error('Failed to get application trends:', err);
+    return [];
+  }
+}
