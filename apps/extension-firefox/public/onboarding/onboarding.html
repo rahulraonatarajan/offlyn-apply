@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Offlyn - Onboarding</title>
+  <link rel="icon" type="image/png" sizes="48x48" href="../icons/icon-48.png">
+  <title>Offlyn Apply - Onboarding</title>
   <style>
     * {
       margin: 0;
@@ -13,29 +14,143 @@
     
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(to bottom right, #f8fafc, #eff6ff);
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 20px;
+      padding: 0;
     }
     
     .container {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      max-width: 600px;
+      background: transparent;
+      max-width: 760px;
       width: 100%;
       overflow: hidden;
+      margin-bottom: 24px;
+      padding: 0 24px;
     }
-    
-    .header {
-      background: #667eea;
-      color: white;
-      padding: 30px;
+
+    /* Top nav bar */
+    .top-nav {
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 16px 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 860px;
+    }
+    .top-nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .top-nav-brand img {
+      height: 36px;
+      width: auto;
+      object-fit: contain;
+    }
+    .top-nav-info .top-nav-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1e2a3a;
+    }
+    .top-nav-info .top-nav-step {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 1px;
+    }
+    .top-nav-exit {
+      font-size: 13px;
+      color: #94a3b8;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: inherit;
+      transition: color 0.15s;
+    }
+    .top-nav-exit:hover { color: #1e2a3a; }
+
+    /* Step wizard */
+    .step-wizard {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px 40px 20px;
+      gap: 0;
+      background: #fff;
+      border-bottom: 1px solid #f0f0f0;
+      max-width: 860px;
+      width: 100%;
+    }
+    .wizard-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      position: relative;
       text-align: center;
     }
+    .wizard-step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 16px;
+      left: calc(50% + 20px);
+      width: calc(100% - 40px);
+      height: 2px;
+      background: #e5e7eb;
+    }
+    .wizard-step.completed:not(:last-child)::after { background: #16a34a; }
+    .wizard-icon {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      border: 2px solid #e5e7eb;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      transition: all 0.2s;
+    }
+    .wizard-icon svg { color: #94a3b8; width: 16px; height: 16px; }
+    .wizard-step.active .wizard-icon {
+      border-color: #16a34a;
+      background: #16a34a;
+    }
+    .wizard-step.active .wizard-icon svg { color: #fff; }
+    .wizard-step.completed .wizard-icon {
+      border-color: #16a34a;
+      background: #e8f5e9;
+    }
+    .wizard-step.completed .wizard-icon svg { color: #16a34a; }
+    .wizard-label {
+      font-size: 10px;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+    .wizard-step.active .wizard-label { color: #1e2a3a; font-weight: 600; }
+    .wizard-step.completed .wizard-label { color: #16a34a; }
+    .wizard-step.completed,
+    .wizard-step.active { cursor: pointer; }
+    .wizard-step.completed:hover .wizard-icon {
+      box-shadow: 0 0 0 3px rgba(124, 179, 66, 0.2);
+    }
+    .wizard-step.active:hover .wizard-icon {
+      box-shadow: 0 0 0 3px rgba(124, 179, 66, 0.2);
+    }
+
+    .header {
+      display: none;
+    }
+    .header-logo-container { display: none; }
+    .header-logo { display: none; }
     
     .header h1 {
       font-size: 28px;
@@ -48,7 +163,7 @@
     }
     
     .content {
-      padding: 40px;
+      padding: 0;
     }
     
     .step {
@@ -66,29 +181,36 @@
     }
     
     .upload-area {
-      border: 2px dashed #ddd;
-      border-radius: 8px;
-      padding: 40px;
+      border: 2px dashed #cdd5df;
+      border-radius: 12px;
+      padding: 48px 40px;
       text-align: center;
       cursor: pointer;
       transition: all 0.3s;
+      background: #fff;
     }
     
     .upload-area:hover {
-      border-color: #667eea;
-      background: #f8f9ff;
+      border-color: #1e2a3a;
+      background: #f9fafb;
     }
     
     .upload-area.dragging {
-      border-color: #667eea;
-      background: #f0f3ff;
+      border-color: #16a34a;
+      background: #f0f7e8;
     }
     
     .upload-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-      color: #667eea;
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
+      background: #f0f2f5;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
+    .upload-icon svg { color: #94a3b8; }
     
     .upload-text {
       font-size: 16px;
@@ -107,7 +229,7 @@
     
     .file-info {
       display: none;
-      background: #f8f9ff;
+      background: #f0f7e8;
       padding: 16px;
       border-radius: 8px;
       margin-top: 16px;
@@ -235,7 +357,7 @@
     
     .profile-section h3 {
       font-size: 16px;
-      color: #667eea;
+      color: #1e2a3a;
       margin-bottom: 12px;
       padding-bottom: 8px;
       border-bottom: 2px solid #f0f0f0;
@@ -243,54 +365,61 @@
     
     .profile-field {
       display: flex;
-      margin-bottom: 12px;
+      flex-direction: column;
+      margin-bottom: 20px;
       font-size: 14px;
-      align-items: flex-start;
+      gap: 6px;
     }
     
     .profile-label {
       font-weight: 600;
-      color: #666;
-      width: 140px;
-      flex-shrink: 0;
-      padding-top: 8px;
+      color: #1e2a3a;
+      font-size: 13px;
     }
     
     .profile-value {
-      color: #333;
+      color: #1e2a3a;
       flex: 1;
     }
     
     .profile-input {
       flex: 1;
-      padding: 8px 12px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      padding: 12px 16px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
       font-size: 14px;
       font-family: inherit;
+      background: #f0f2f5;
+      color: #1e2a3a;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
     
     .profile-input:focus {
       outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      border-color: #16a34a;
+      box-shadow: 0 0 0 3px rgba(124, 179, 66, 0.15);
+      background: #fff;
     }
     
     .profile-textarea {
       flex: 1;
-      padding: 8px 12px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      padding: 12px 16px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
       font-size: 14px;
       font-family: inherit;
       min-height: 80px;
       resize: vertical;
+      background: #f0f2f5;
+      color: #1e2a3a;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
     
     .profile-textarea:focus {
       outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      border-color: #16a34a;
+      box-shadow: 0 0 0 3px rgba(124, 179, 66, 0.15);
+      background: #fff;
     }
     
     .editable-list {
@@ -305,51 +434,62 @@
     
     .editable-list-item input {
       flex: 1;
-      padding: 6px 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      padding: 10px 14px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
       font-size: 13px;
+      background: #f0f2f5;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .editable-list-item input:focus {
+      outline: none;
+      border-color: #16a34a;
+      box-shadow: 0 0 0 3px rgba(124, 179, 66, 0.15);
+      background: #fff;
     }
     
     .editable-list-item button {
-      padding: 6px 12px;
-      background: #f44336;
-      color: white;
-      border: none;
-      border-radius: 4px;
+      padding: 8px 14px;
+      background: #fee2e2;
+      color: #ef4444;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
       cursor: pointer;
       font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
     }
     
     .editable-list-item button:hover {
-      background: #d32f2f;
+      background: #fecaca;
+      border-color: #ef4444;
     }
     
     .add-item-btn {
-      padding: 6px 12px;
-      background: #667eea;
-      color: white;
-      border: none;
-      border-radius: 4px;
+      padding: 8px 14px;
+      background: #f0f7e8;
+      color: #558b2f;
+      border: 1px solid #c5e1a5;
+      border-radius: 8px;
       cursor: pointer;
       font-size: 13px;
+      font-weight: 500;
       margin-top: 8px;
+      transition: all 0.2s;
     }
     
     .add-item-btn:hover {
-      background: #5568d3;
+      background: #e8f5e9;
+      border-color: #16a34a;
     }
 
     /* Self-ID Questionnaire Styles */
     .selfid-intro {
       font-size: 14px;
-      color: #666;
+      color: #94a3b8;
       line-height: 1.6;
       margin-bottom: 24px;
-      padding: 16px;
-      background: #f9f9f9;
-      border-radius: 8px;
-      border-left: 4px solid #667eea;
+      text-align: center;
     }
 
     .question-group {
@@ -391,7 +531,7 @@
 
     .checkbox-group label:hover,
     .radio-group label:hover {
-      background: #f5f5f5;
+      background: #f0f7e8;
     }
 
     .checkbox-group input[type="checkbox"],
@@ -432,8 +572,8 @@
     }
     
     .skill-tag {
-      background: #e3f2fd;
-      color: #1976d2;
+      background: #e8f5e9;
+      color: #2e7d32;
       padding: 4px 12px;
       border-radius: 16px;
       font-size: 13px;
@@ -449,36 +589,174 @@
       flex: 1;
       padding: 14px 24px;
       border: none;
-      border-radius: 6px;
+      border-radius: 10px;
       font-size: 15px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
     
     .btn-primary {
-      background: #667eea;
+      background: #558b2f;
       color: white;
     }
     
     .btn-primary:hover:not(:disabled) {
-      background: #5568d3;
+      background: #4a7c28;
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+      box-shadow: 0 4px 12px rgba(85, 139, 47, 0.3);
     }
     
     .btn-secondary {
-      background: #f5f5f5;
-      color: #666;
+      background: #fff;
+      color: #64748b;
+      border: 1px solid #e5e7eb;
     }
     
     .btn-secondary:hover:not(:disabled) {
-      background: #e0e0e0;
+      background: #f9fafb;
+      border-color: #d1d5db;
     }
     
     .btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    /* Select styling to match inputs */
+    .question-group select,
+    form select {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #f0f2f5;
+      color: #1e2a3a;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 16px center;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .question-group select:focus,
+    form select:focus {
+      outline: none;
+      border-color: #16a34a;
+      box-shadow: 0 0 0 3px rgba(124, 179, 66, 0.15);
+      background-color: #fff;
+    }
+
+    /* Step title styling */
+    .step-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #1e2a3a;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .step-subtitle {
+      font-size: 14px;
+      color: #94a3b8;
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    /* Form grid layout for two-column fields */
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+    .form-group.full-width {
+      grid-column: 1 / -1;
+    }
+    .form-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1e2a3a;
+    }
+    .form-group label .required-mark {
+      color: #ef4444;
+      margin-left: 2px;
+    }
+
+    /* Skip link styling */
+    .skip-link {
+      display: block;
+      text-align: center;
+      margin-top: 20px;
+      color: #1e2a3a;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      padding: 8px;
+      transition: color 0.2s;
+    }
+    .skip-link:hover {
+      color: #558b2f;
+    }
+
+    /* Info box */
+    .info-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      background: #eef6ff;
+      border-radius: 10px;
+      margin-top: 24px;
+      font-size: 14px;
+      color: #3b82f6;
+    }
+    .info-box svg {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+    }
+
+    /* Review sections */
+    .review-section {
+      padding: 20px 24px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+    .review-section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #16a34a;
+      margin-bottom: 12px;
+    }
+    .review-field {
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #1e2a3a;
+    }
+    .review-field strong {
+      font-weight: 600;
+    }
+
+    /* Content card wrapper */
+    .content-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 40px;
+      margin-top: 24px;
     }
     
     .spinner {
@@ -517,7 +795,7 @@
     
     .progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #667eea, #764ba2);
+      background: linear-gradient(90deg, #16a34a, #22c55e);
       border-radius: 4px;
       transition: width 0.3s ease;
       width: 0%;
@@ -546,7 +824,7 @@
     }
     
     .progress-stage.active {
-      color: #667eea;
+      color: #1e2a3a;
       font-weight: 600;
     }
     
@@ -567,7 +845,7 @@
     
     .progress-stage.active .stage-icon {
       background: #e3f2fd;
-      color: #667eea;
+      color: #1e2a3a;
     }
     
     .progress-stage.completed .stage-icon {
@@ -630,96 +908,183 @@
       color: #333;
     }
     
-    /* Learned Values Styles */
-    .learned-value-card {
-      background: white;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 12px;
+    /* ── RL Learned Values: Card Grid ─────────────────────────────────── */
+
+    /* Container scroll area */
+    #learnedValuesContainer {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      transition: all 0.2s;
-    }
-    
-    .learned-value-card:hover {
-      border-color: #667eea;
-      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
-    }
-    
-    .learned-value-info {
-      flex: 1;
-    }
-    
-    .learned-value-field {
-      font-weight: 600;
-      color: #333;
-      margin-bottom: 8px;
-      font-size: 15px;
-    }
-    
-    .learned-value-change {
-      display: flex;
+      flex-direction: column;
       gap: 12px;
-      margin-bottom: 4px;
-      font-size: 14px;
+      padding-bottom: 8px;
     }
-    
-    .learned-value-label {
-      color: #666;
-      font-size: 12px;
-      min-width: 80px;
+
+    /* Individual pattern card */
+    .rl-card {
+      background: #ffffff;
+      border: 1px solid #E5E7EB;
+      border-radius: 10px;
+      padding: 16px;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
-    
-    .learned-value-text {
-      color: #333;
-      word-break: break-word;
+
+    .rl-card:hover {
+      border-color: #27E38D;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
     }
-    
-    .learned-value-arrow {
-      color: #667eea;
-      margin: 0 4px;
-    }
-    
-    .learned-value-meta {
-      color: #999;
-      font-size: 12px;
-      margin-top: 8px;
-    }
-    
-    .learned-value-actions {
+
+    /* Card header row: field name + delete button */
+    .rl-card__header {
       display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .rl-card__field-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #0F172A;
+    }
+
+    /* Thin navy divider */
+    .rl-card__divider {
+      height: 1px;
+      background: #E5E7EB;
+      margin-bottom: 10px;
+    }
+
+    /* "Learned value" label + value */
+    .rl-card__learned-label {
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748B;
+      margin-bottom: 4px;
+    }
+
+    .rl-card__learned-value {
+      font-size: 14px;
+      color: #27E38D;
+      font-weight: 500;
+      word-break: break-word;
+      margin-bottom: 10px;
+    }
+
+    /* Confidence bar row */
+    .rl-card__confidence-row {
+      display: flex;
+      align-items: center;
       gap: 8px;
+      margin-bottom: 8px;
     }
-    
-    .btn-delete {
-      background: #ff5252;
-      color: white;
-      border: none;
-      padding: 8px 16px;
+
+    .rl-bar {
+      flex: 1;
+      height: 6px;
+      background: #E5E7EB;
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+
+    .rl-bar__fill {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.3s ease;
+    }
+
+    /* Confidence colour tiers */
+    .rl-bar--high   .rl-bar__fill { background: #27E38D; }
+    .rl-bar--medium .rl-bar__fill { background: #6EE7B7; }
+    .rl-bar--low    .rl-bar__fill { background: #F59E0B; }
+
+    .rl-bar__pct {
+      font-size: 12px;
+      font-weight: 600;
+      color: #0F172A;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* Stats row */
+    .rl-card__stats {
+      font-size: 12px;
+      color: #64748B;
+    }
+
+    .rl-card__ctx {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #94A3B8;
+    }
+
+    /* Delete button */
+    .rl-card__delete {
+      background: transparent;
+      color: #EF4444;
+      border: 1px solid #EF4444;
+      padding: 4px 10px;
       border-radius: 6px;
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
-      transition: all 0.2s;
-      white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
     }
-    
-    .btn-delete:hover {
-      background: #ff1744;
-      transform: translateY(-1px);
+
+    .rl-card__delete:hover {
+      background: #EF4444;
+      color: #ffffff;
     }
-    
-    .empty-learned-state {
+
+    /* Clear all / secondary danger button */
+    .btn-outline-danger {
+      background: transparent;
+      color: #EF4444;
+      border: 1px solid #EF4444;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-outline-danger:hover {
+      background: #EF4444;
+      color: #ffffff;
+    }
+
+    /* Empty state */
+    .rl-empty-state {
       text-align: center;
-      padding: 40px;
-      color: #999;
+      padding: 48px 24px;
+      color: #64748B;
     }
-    
-    .empty-learned-state h3 {
-      margin-bottom: 12px;
-      color: #666;
+
+    .rl-empty-state__icon {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 16px;
+      color: #CBD5E1;
     }
+
+    .rl-empty-state__title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #0F172A;
+      margin-bottom: 8px;
+    }
+
+    .rl-empty-state__desc {
+      font-size: 14px;
+      color: #64748B;
+      max-width: 400px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* Legacy class aliases (in case any stale HTML still uses them) */
+    .learned-value-card { display: none; }
+    .empty-learned-state { display: none; }
 
     /* AI Suggestion Hint for empty fields */
     .input-wrapper {
@@ -740,11 +1105,11 @@
       gap: 6px;
       margin-top: 4px;
       padding: 5px 10px;
-      background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%);
-      border: 1px solid rgba(102, 126, 234, 0.15);
+      background: linear-gradient(135deg, #f0f7e8 0%, #e8f5e9 100%);
+      border: 1px solid rgba(30, 42, 58, 0.15);
       border-radius: 6px;
       font-size: 12px;
-      color: #8b9be8;
+      color: #16a34a;
       cursor: pointer;
       transition: all 0.25s ease;
       user-select: none;
@@ -759,10 +1124,10 @@
     }
 
     .ai-suggest-tile:hover {
-      background: linear-gradient(135deg, #eef1ff 0%, #e4e9ff 100%);
-      border-color: rgba(102, 126, 234, 0.35);
-      color: #667eea;
-      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+      background: linear-gradient(135deg, #e8f5e9 0%, #dcedc8 100%);
+      border-color: rgba(30, 42, 58, 0.35);
+      color: #1e2a3a;
+      box-shadow: 0 2px 8px rgba(30, 42, 58, 0.1);
     }
 
     .ai-suggest-tile .ai-sparkle {
@@ -787,6 +1152,123 @@
     @keyframes pulse {
       0%, 100% { opacity: 0.5; }
       50% { opacity: 1; }
+    }
+
+    /* ── Split-field layouts ──────────────────────────────────────────────── */
+    .form-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .form-row .form-group {
+      flex: 1;
+      min-width: 0;
+    }
+    .form-row .form-group.narrow {
+      flex: 0 0 160px;
+    }
+
+    .form-section-header {
+      margin: 20px 0 8px;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 6px;
+    }
+    .form-section-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .form-hint {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 3px;
+      display: block;
+    }
+
+    /* ── Self-ID step ────────────────────────────────────────────────────── */
+    .privacy-notice {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 12px 0 20px;
+      font-size: 13px;
+      color: #166534;
+    }
+    .privacy-notice svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      stroke: #166534;
+    }
+
+    .selfid-group {
+      margin-bottom: 20px;
+    }
+    .selfid-group label.group-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1e2a3a;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .selfid-group .group-hint {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 16px;
+    }
+    .checkbox-grid label,
+    .radio-list label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #374151;
+      cursor: pointer;
+      padding: 3px 0;
+    }
+    .checkbox-grid input[type="checkbox"],
+    .radio-list input[type="radio"] {
+      accent-color: #558b2f;
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+    }
+
+    .radio-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .age-option-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    .age-option-row label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #374151;
+      cursor: pointer;
+    }
+    .age-option-row input[type="radio"] {
+      accent-color: #558b2f;
     }
 
     /* AI suggestion result shown inline */
@@ -843,192 +1325,1017 @@
       background: #f5f5f5;
       color: #666;
     }
+
+    /* ── Ollama Setup Step ───────────────────────────────── */
+    .ollama-state { display: none; }
+    .ollama-state.active { display: block; }
+
+    .ollama-spinner-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 32px 0;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    .ollama-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #16a34a;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .ollama-status-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 18px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+    }
+    .ollama-status-card.success {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+    }
+    .ollama-status-card.error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+    }
+    .ollama-status-card svg { flex-shrink: 0; margin-top: 2px; }
+    .ollama-status-card.success svg { color: #16a34a; }
+    .ollama-status-card.error svg { color: #dc2626; }
+    .ollama-status-body h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .ollama-status-card.success .ollama-status-body h3 { color: #15803d; }
+    .ollama-status-card.error .ollama-status-body h3 { color: #b91c1c; }
+    .ollama-status-meta {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .ollama-privacy-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: #f8faff;
+      border: 1px solid #dbeafe;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #3b82f6;
+      margin-bottom: 16px;
+    }
+    .ollama-privacy-notice svg { flex-shrink: 0; margin-top: 1px; color: #3b82f6; }
+
+    /* CORS warning banner */
+    .ollama-cors-warning {
+      display: none;
+      align-items: flex-start;
+      gap: 12px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+    .ollama-cors-warning.visible { display: flex; }
+    .ollama-cors-warning svg { flex-shrink: 0; color: #d97706; margin-top: 1px; }
+    .ollama-cors-warning h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #92400e;
+      margin-bottom: 6px;
+    }
+    .ollama-cors-warning p {
+      font-size: 13px;
+      color: #78350f;
+      margin: 0 0 8px;
+      line-height: 1.5;
+    }
+    .cors-fix-cmd {
+      background: #1e2a3a;
+      color: #fbbf24;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-family: monospace;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .cors-steps {
+      font-size: 12px;
+      color: #92400e;
+      margin: 6px 0 0 0;
+      padding-left: 16px;
+      line-height: 1.7;
+    }
+
+    .ollama-advanced summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      color: #94a3b8;
+      user-select: none;
+      margin-bottom: 0;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ollama-advanced summary::before {
+      content: '▶';
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+    .ollama-advanced[open] summary::before { transform: rotate(90deg); }
+    .ollama-advanced summary::-webkit-details-marker { display: none; }
+    .ollama-advanced .adv-body {
+      margin-top: 14px;
+      padding: 16px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .adv-test-result {
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      display: none;
+    }
+    .adv-test-result.visible { display: block; }
+    .adv-test-result.ok { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+    .adv-test-result.fail { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+    .setup-steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin: 16px 0;
+    }
+    .setup-step-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .setup-step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #558b2f;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .setup-step-content h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1e2a3a;
+      margin-bottom: 4px;
+    }
+    .setup-step-content p {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 8px;
+    }
+    .code-cmd {
+      background: #1e2a3a;
+      color: #a3e635;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-family: monospace;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .btn-copy-cmd {
+      background: #334155;
+      color: #cbd5e1;
+      border: none;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .btn-copy-cmd:hover { background: #475569; }
+
+    /* Troubleshooting modal */
+    .troubleshoot-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+    }
+    .troubleshoot-modal.visible { display: block; }
+    .ts-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+    }
+    .ts-dialog {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #fff;
+      border-radius: 12px;
+      width: min(680px, 90vw);
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+    .ts-dialog-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      position: sticky;
+      top: 0;
+      background: #fff;
+      z-index: 1;
+    }
+    .ts-dialog-header h2 { font-size: 17px; color: #1e2a3a; }
+    .ts-close {
+      background: none;
+      border: none;
+      font-size: 22px;
+      color: #94a3b8;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .ts-close:hover { color: #1e2a3a; }
+    .ts-dialog-body { padding: 20px 24px 24px; }
+    .ts-section { margin-bottom: 24px; }
+    .ts-section h3 { font-size: 14px; font-weight: 700; color: #1e2a3a; margin-bottom: 12px; }
+    .ts-issue { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #f5f5f5; }
+    .ts-issue:last-child { border-bottom: none; margin-bottom: 0; }
+    .ts-issue h4 { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .ts-issue p { font-size: 13px; color: #6b7280; margin: 0 0 4px; line-height: 1.5; }
+    .ts-issue ul { font-size: 13px; color: #6b7280; margin: 4px 0 0 18px; line-height: 1.7; }
+    .ts-issue code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+    .ts-cmd-row { margin: 8px 0; }
+    .ts-resources a { display: block; color: #558b2f; font-size: 13px; margin-bottom: 6px; text-decoration: none; }
+    .ts-resources a:hover { text-decoration: underline; }
+    .ts-skip-wrap { margin-top: 20px; padding-top: 16px; border-top: 1px solid #f0f0f0; font-size: 13px; color: #6b7280; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
+  <!-- Top navigation -->
+  <div class="top-nav">
+    <div class="top-nav-brand">
+      <img src="../icons/primary-logo.png" alt="Offlyn Apply" style="height: 36px; width: auto; border-radius: 0;">
+      <div class="top-nav-info">
+        <div class="top-nav-title">Setup Your Profile</div>
+        <div class="top-nav-step" id="stepIndicator">Step 1 of 8</div>
+      </div>
+    </div>
+    <button class="top-nav-exit" id="exitBtn" title="Close">&larr; Exit</button>
+  </div>
+
+  <!-- Step wizard -->
+  <div class="step-wizard" id="stepWizard">
+    <div class="wizard-step active" data-step="1">
+      <div class="wizard-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div class="wizard-label">Resume</div>
+    </div>
+    <div class="wizard-step" data-step="2">
+      <div class="wizard-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      </div>
+      <div class="wizard-label">AI Setup</div>
+    </div>
+    <div class="wizard-step" data-step="3">
+      <div class="wizard-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+      <div class="wizard-label">Personal Info</div>
+    </div>
+    <div class="wizard-step" data-step="4">
+      <div class="wizard-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      </div>
+      <div class="wizard-label">Links</div>
+    </div>
+    <div class="wizard-step" data-step="5">
+      <div class="wizard-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <div class="wizard-label">Self-ID</div>
+    </div>
+    <div class="wizard-step" data-step="6">
+      <div class="wizard-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+      </div>
+      <div class="wizard-label">Work Auth</div>
+    </div>
+    <div class="wizard-step" data-step="7">
+      <div class="wizard-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      </div>
+      <div class="wizard-label">Cover Letter</div>
+    </div>
+    <div class="wizard-step" data-step="8">
+      <div class="wizard-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="wizard-label">Done</div>
+    </div>
+  </div>
+
   <div class="container">
     <div class="header">
-      <h1>Welcome to Offlyn</h1>
+      <h1>Welcome to Offlyn Apply</h1>
       <p>Upload your resume to get started with automated job applications</p>
     </div>
     
     <div class="content">
       <!-- Step 1: Upload Resume -->
       <div id="step-upload" class="step active">
-        <div class="connection-status" id="connectionStatus">
-          <span class="status-indicator"></span>
-          <span>Checking connection...</span>
-        </div>
-        
-        <div class="upload-area" id="uploadArea">
-          <div class="upload-icon">[+]</div>
-          <div class="upload-text">Drop your resume here or click to browse</div>
-          <div class="upload-hint">Supports PDF, DOC, DOCX, TXT (Max 5MB)</div>
-          <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt">
-        </div>
-        
-        <div class="file-info" id="fileInfo">
-          <div class="file-name" id="fileName"></div>
-          <div class="file-size" id="fileSize"></div>
-        </div>
-        
-        <div class="status" id="uploadStatus"></div>
-        <div id="errorDetails"></div>
-        
-        <!-- Progress Bar -->
-        <div class="progress-container" id="progressContainer">
-          <div class="progress-bar">
-            <div class="progress-fill" id="progressFill"></div>
-          </div>
-          <div class="progress-text" id="progressText">Preparing...</div>
+        <div class="content-card">
+          <h2 class="step-title">Upload Your Resume</h2>
+          <p class="step-subtitle">We'll auto-extract your information to save time (optional)</p>
           
-          <div class="progress-stages">
-            <div class="progress-stage" id="stage-read">
-              <div class="stage-icon">1</div>
-              <span>Reading File</span>
+          <div class="connection-status" id="connectionStatus" style="display: none;">
+            <span class="status-indicator"></span>
+            <span>Checking connection...</span>
+          </div>
+          
+          <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             </div>
-            <div class="progress-stage" id="stage-extract">
-              <div class="stage-icon">2</div>
-              <span>Extracting Text</span>
+            <div class="upload-text" style="font-size: 16px; font-weight: 600; color: #1e2a3a; margin-bottom: 4px;">Drag and drop your resume here</div>
+            <div style="color: #94a3b8; font-size: 13px; margin-bottom: 14px;">or click to browse</div>
+            <div style="display: inline-block; background: #558b2f; color: #fff; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">Select File</div>
+            <div class="upload-hint" style="margin-top: 14px;">Supports PDF, DOCX, TXT (max 5MB)</div>
+            <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt">
+          </div>
+          
+          <div class="file-info" id="fileInfo">
+            <div class="file-name" id="fileName"></div>
+            <div class="file-size" id="fileSize"></div>
+          </div>
+          
+          <div class="status" id="uploadStatus"></div>
+          <div id="errorDetails"></div>
+          
+          <!-- Progress Bar -->
+          <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
             </div>
-            <div class="progress-stage" id="stage-parse">
-              <div class="stage-icon">3</div>
-              <span>AI Parsing</span>
-            </div>
-            <div class="progress-stage" id="stage-done">
-              <div class="stage-icon">4</div>
-              <span>Complete</span>
+            <div class="progress-text" id="progressText">Preparing...</div>
+            
+            <div class="progress-stages">
+              <div class="progress-stage" id="stage-read">
+                <div class="stage-icon">1</div>
+                <span>Reading File</span>
+              </div>
+              <div class="progress-stage" id="stage-extract">
+                <div class="stage-icon">2</div>
+                <span>Extracting Text</span>
+              </div>
+              <div class="progress-stage" id="stage-parse">
+                <div class="stage-icon">3</div>
+                <span>AI Parsing</span>
+              </div>
+              <div class="progress-stage" id="stage-done">
+                <div class="stage-icon">4</div>
+                <span>Complete</span>
+              </div>
             </div>
           </div>
+          
+          <a class="skip-link" id="skipUploadBtn">Skip for now</a>
         </div>
         
-        <div class="button-group">
-          <button class="btn btn-secondary" id="skipUploadBtn">Skip & Enter Manually</button>
-          <button class="btn btn-primary" id="parseBtn" disabled>Parse Resume</button>
+        <div class="button-group" style="margin-top: 24px;">
+          <button class="btn btn-secondary" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <button class="btn btn-primary" id="parseBtn" disabled>
+            Next
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
       </div>
       
-      <!-- Step 2: Manual Data Entry / Review Extracted Data -->
+      <!-- Step 2: Ollama AI Setup -->
+      <div id="step-ollama" class="step">
+        <div class="content-card">
+          <h2 class="step-title">AI Setup (Ollama)</h2>
+          <p class="step-subtitle">Connect local AI for smart resume parsing and field suggestions</p>
+
+          <!-- State: Checking -->
+          <div id="ollamaChecking" class="ollama-state active">
+            <div class="ollama-spinner-wrap">
+              <div class="ollama-spinner"></div>
+              <span>Testing connection to Ollama...</span>
+            </div>
+          </div>
+
+          <!-- State: Connected -->
+          <div id="ollamaConnected" class="ollama-state">
+            <div class="ollama-status-card success" id="ollamaConnectedCard">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <div class="ollama-status-body">
+                <h3>Ollama Connected</h3>
+                <p class="ollama-status-meta">
+                  Version: <span id="ollamaVersion">–</span><br>
+                  Endpoint: <span id="ollamaEndpoint">http://localhost:11434</span><br>
+                  Model: <span id="ollamaModel">llama3.2</span>
+                </p>
+              </div>
+            </div>
+
+            <!-- CORS Warning — shown when Ollama reachable but origin is blocked -->
+            <div class="ollama-cors-warning" id="ollamaCorsWarning">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <div style="flex:1;">
+                <h4>CORS Blocked — AI calls will fail</h4>
+                <p>Ollama is reachable but blocking requests from this extension. You need to restart Ollama with the CORS origin flag.</p>
+
+                <p style="margin-bottom:6px;"><strong>Step 1 — Stop the current Ollama process</strong></p>
+                <p style="font-size:12px;color:#78350f;margin-bottom:8px;">If Ollama is in the macOS menu bar: right-click its icon → <em>Quit Ollama</em>.<br>If started in a terminal: press <strong>Ctrl+C</strong> in that terminal window.</p>
+
+                <p style="margin-bottom:6px;"><strong>Step 2 — Start Ollama with CORS enabled (copy the whole line)</strong></p>
+                <div class="cors-fix-cmd">
+                  <code id="corsFixCmdText">OLLAMA_ORIGINS='moz-extension://*' ollama serve</code>
+                  <button class="btn-copy-cmd" data-copy="OLLAMA_ORIGINS='moz-extension://*' ollama serve">Copy</button>
+                </div>
+                <p style="font-size:12px;color:#92400e;margin:6px 0 12px;">⚠️ This must be one single command — do NOT press Enter after the env var part.<br>Keep the terminal window open while using the extension.</p>
+
+                <details style="margin-bottom:12px;">
+                  <summary style="cursor:pointer;font-size:12px;font-weight:600;color:#92400e;list-style:none;display:flex;align-items:center;gap:4px;">
+                    ▶ Permanent fix — never do this again
+                  </summary>
+                  <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px;">
+                    <div>
+                      <p style="font-size:12px;color:#78350f;margin-bottom:5px;"><strong>macOS / Linux</strong> — add to your shell config once:</p>
+                      <div class="cors-fix-cmd"><code>echo 'export OLLAMA_ORIGINS="moz-extension://*"' &gt;&gt; ~/.zshrc &amp;&amp; source ~/.zshrc</code><button class="btn-copy-cmd" data-copy='echo '"'"'export OLLAMA_ORIGINS="moz-extension://*"'"'"' >> ~/.zshrc && source ~/.zshrc'>Copy</button></div>
+                      <p style="font-size:12px;color:#92400e;margin-top:5px;">Then quit &amp; restart Ollama. From then on, plain <code style="background:#1e2a3a;color:#fbbf24;padding:1px 5px;border-radius:3px;font-size:11px;">ollama serve</code> always has the right origins.</p>
+                    </div>
+                    <div>
+                      <p style="font-size:12px;color:#78350f;margin-bottom:5px;"><strong>Windows (PowerShell)</strong>:</p>
+                      <div class="cors-fix-cmd"><code>$env:OLLAMA_ORIGINS='moz-extension://*'; ollama serve</code><button class="btn-copy-cmd" data-copy="$env:OLLAMA_ORIGINS='moz-extension://*'; ollama serve">Copy</button></div>
+                    </div>
+                  </div>
+                </details>
+
+                <p style="margin-bottom:6px;"><strong>Step 3 — Re-test after restarting</strong></p>
+                <button class="btn btn-secondary" id="retestAfterCorsBtn" style="font-size:13px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  Re-test Connection
+                </button>
+              </div>
+            </div>
+
+            <div class="ollama-privacy-notice">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span><strong>100% Private</strong> — All AI processing happens on your device. No data is sent to external servers.</span>
+            </div>
+
+            <details class="ollama-advanced" id="ollamaAdvanced">
+              <summary>Advanced Configuration</summary>
+              <div class="adv-body">
+                <div class="form-group">
+                  <label class="profile-label">Custom Ollama Endpoint</label>
+                  <input type="url" id="customOllamaEndpoint" class="profile-input" value="http://localhost:11434" placeholder="http://localhost:11434">
+                  <small style="font-size:12px;color:#94a3b8;margin-top:4px;display:block;">Change only if running Ollama on a custom port or remote server</small>
+                </div>
+                <div class="form-group">
+                  <label class="profile-label">Chat Model</label>
+                  <input type="text" id="customChatModel" class="profile-input" value="llama3.2" placeholder="llama3.2">
+                  <small style="font-size:12px;color:#94a3b8;margin-top:4px;display:block;">e.g. <code>llama3.2</code>, <code>llama3.2:1b</code>, <code>mistral</code></small>
+                </div>
+                <div class="form-group">
+                  <label class="profile-label">Embedding Model</label>
+                  <input type="text" id="customEmbeddingModel" class="profile-input" value="nomic-embed-text" placeholder="nomic-embed-text">
+                  <small style="font-size:12px;color:#94a3b8;margin-top:4px;display:block;">Used for semantic search and smart matching</small>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <button class="btn btn-secondary" id="testCustomEndpointBtn" style="flex:1;min-width:140px;">Test Custom Config</button>
+                  <button class="btn" id="resetOllamaDefaultsBtn" style="flex:1;min-width:100px;background:#f9fafb;border:1px solid #e5e7eb;color:#6b7280;">Reset to Default</button>
+                </div>
+                <div id="advTestResult" class="adv-test-result"></div>
+              </div>
+            </details>
+          </div>
+
+          <!-- State: Not Installed -->
+          <div id="ollamaNotInstalled" class="ollama-state">
+            <div class="ollama-status-card error">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <div class="ollama-status-body">
+                <h3>Ollama Not Detected</h3>
+                <p class="ollama-status-meta">Ollama enables AI-powered resume parsing, cover letter generation, and smart field suggestions.</p>
+              </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+              <h3 style="font-size:14px;font-weight:700;color:#1e2a3a;margin-bottom:12px;">Quick Setup (5 minutes)</h3>
+              <div class="setup-steps-list">
+                <div class="setup-step-item">
+                  <div class="setup-step-num">1</div>
+                  <div class="setup-step-content">
+                    <h4>Download Ollama</h4>
+                    <p>Install Ollama for your operating system.</p>
+                    <a href="https://ollama.com/download" target="_blank" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:8px 16px;">
+                      Download Ollama
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                  </div>
+                </div>
+                <div class="setup-step-item">
+                  <div class="setup-step-num">2</div>
+                  <div class="setup-step-content">
+                    <h4>Install the AI Model</h4>
+                    <p>Open your terminal and run:</p>
+                    <div class="code-cmd"><code>ollama pull llama3.2</code><button class="btn-copy-cmd" data-copy="ollama pull llama3.2">Copy</button></div>
+                  </div>
+                </div>
+                <div class="setup-step-item">
+                  <div class="setup-step-num">3</div>
+                  <div class="setup-step-content">
+                    <h4>Verify Installation</h4>
+                    <div class="code-cmd"><code>ollama list</code><button class="btn-copy-cmd" data-copy="ollama list">Copy</button></div>
+                  </div>
+                </div>
+                <div class="setup-step-item">
+                  <div class="setup-step-num">4</div>
+                  <div class="setup-step-content">
+                    <h4>Retry Connection</h4>
+                    <p>Once installed and running, click below.</p>
+                    <button class="btn btn-secondary" id="retryOllamaBtn" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:8px 16px;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                      Test Connection Again
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:12px;">
+                <a href="#" id="showTroubleshootingBtn" style="font-size:13px;color:#558b2f;text-decoration:none;">Having trouble? View troubleshooting guide →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="button-group" style="margin-top:24px;">
+          <button id="backFromOllamaBtn" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <button id="continueWithOllamaBtn" class="btn btn-primary" style="display:none;">
+            Continue with AI Features
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button id="skipOllamaBtn" class="btn btn-secondary" style="display:none;">
+            Skip AI Features
+          </button>
+        </div>
+      </div>
+
+      <!-- Troubleshooting Modal -->
+      <div class="troubleshoot-modal" id="troubleshootModal">
+        <div class="ts-overlay" id="tsOverlay"></div>
+        <div class="ts-dialog">
+          <div class="ts-dialog-header">
+            <h2>Ollama Troubleshooting Guide</h2>
+            <button class="ts-close" id="closeTroubleshootingBtn">&times;</button>
+          </div>
+          <div class="ts-dialog-body">
+            <div class="ts-section">
+              <h3>Common Issues</h3>
+              <div class="ts-issue">
+                <h4>1. Ollama Not Running</h4>
+                <p><strong>Problem:</strong> Ollama is installed but not running.</p>
+                <ul>
+                  <li><strong>macOS/Linux:</strong> Run <code>ollama serve</code> in terminal</li>
+                  <li><strong>Windows:</strong> Ollama starts automatically — check the system tray</li>
+                  <li>Verify with: <code>ollama list</code></li>
+                </ul>
+              </div>
+              <div class="ts-issue">
+                <h4>2. Port Already in Use</h4>
+                <p><strong>Problem:</strong> Port 11434 is in use by another application.</p>
+                <ul>
+                  <li>Check what's using it: <code>lsof -i :11434</code> (macOS/Linux)</li>
+                  <li>Stop the conflicting process, or set a custom port via Advanced Configuration</li>
+                </ul>
+              </div>
+              <div class="ts-issue">
+                <h4>3. Model Not Downloaded</h4>
+                <p><strong>Problem:</strong> Ollama running but model not installed.</p>
+                <ul>
+                  <li>Download: <code>ollama pull llama3.2</code></li>
+                  <li>Verify: <code>ollama list</code> should show <code>llama3.2</code></li>
+                  <li>Embedding model (optional): <code>ollama pull nomic-embed-text</code></li>
+                </ul>
+              </div>
+              <div class="ts-issue">
+                <h4>4. CORS / 403 Forbidden</h4>
+                <p><strong>Problem:</strong> Ollama is reachable but blocking this extension's origin with 403.</p>
+                <p><strong>Root cause:</strong> Ollama checks the <code>Origin</code> header. By default it only allows localhost origins, not <code>moz-extension://</code>.</p>
+                <p><strong>Fix — these steps must be followed exactly:</strong></p>
+                <ul>
+                  <li><strong>Step 1:</strong> Stop Ollama — quit the menu bar app, or Ctrl+C the terminal running <code>ollama serve</code></li>
+                  <li><strong>Step 2:</strong> In a new terminal, paste the following as ONE single command:
+                    <div class="code-cmd" style="margin:6px 0;"><code>OLLAMA_ORIGINS='moz-extension://*' ollama serve</code><button class="btn-copy-cmd" data-copy="OLLAMA_ORIGINS='moz-extension://*' ollama serve">Copy</button></div>
+                  </li>
+                  <li><strong>Step 3:</strong> Keep that terminal open — closing it stops Ollama</li>
+                  <li><strong>Step 4:</strong> Click "Re-test Connection" in the extension</li>
+                </ul>
+                <p style="margin-top:8px;"><strong>Common mistakes that DON'T work:</strong></p>
+                <ul>
+                  <li><code>OLLAMA_ORIGINS='...'</code> on one line, then <code>ollama serve</code> on the next — the env var is lost between commands</li>
+                  <li><code>launchctl setenv OLLAMA_ORIGINS ...</code> — only affects NEW launchd processes, not the current terminal session</li>
+                </ul>
+                <p style="margin-top:8px;"><strong>Permanent fix (macOS/Linux):</strong></p>
+                <div class="code-cmd" style="margin:4px 0;"><code>echo 'export OLLAMA_ORIGINS="moz-extension://*"' &gt;&gt; ~/.zshrc &amp;&amp; source ~/.zshrc</code><button class="btn-copy-cmd" data-copy='echo '"'"'export OLLAMA_ORIGINS="moz-extension://*"'"'"' >> ~/.zshrc && source ~/.zshrc'>Copy</button></div>
+                <p style="font-size:12px;color:#6b7280;margin-top:4px;">After this, plain <code>ollama serve</code> will always have the right origins.</p>
+              </div>
+              <div class="ts-issue">
+                <h4>5. Slow Performance</h4>
+                <ul>
+                  <li>Use smaller model: <code>ollama pull llama3.2:1b</code></li>
+                  <li>First request loads the model (slow) — subsequent requests are fast</li>
+                </ul>
+              </div>
+              <div class="ts-issue">
+                <h4>6. Remote Ollama Server</h4>
+                <ul>
+                  <li>Use Advanced Configuration to set a custom endpoint, e.g. <code>http://192.168.1.100:11434</code></li>
+                  <li>Set <code>OLLAMA_HOST=0.0.0.0</code> on the server side to allow remote connections</li>
+                </ul>
+              </div>
+            </div>
+            <div class="ts-section">
+              <h3>Test Commands</h3>
+              <div class="ts-cmd-row"><div class="code-cmd"><code>curl http://localhost:11434/api/version</code><button class="btn-copy-cmd" data-copy="curl http://localhost:11434/api/version">Copy</button></div></div>
+              <div class="ts-cmd-row"><div class="code-cmd"><code>ollama list</code><button class="btn-copy-cmd" data-copy="ollama list">Copy</button></div></div>
+              <div class="ts-cmd-row"><div class="code-cmd"><code>ollama serve</code><button class="btn-copy-cmd" data-copy="ollama serve">Copy</button></div></div>
+            </div>
+            <div class="ts-section ts-resources">
+              <h3>Additional Resources</h3>
+              <a href="https://ollama.com/download" target="_blank">Ollama Installation →</a>
+              <a href="https://github.com/ollama/ollama/blob/main/docs/troubleshooting.md" target="_blank">Official Troubleshooting Guide →</a>
+              <a href="https://github.com/ollama/ollama/issues" target="_blank">Report an Issue on GitHub →</a>
+            </div>
+            <div class="ts-skip-wrap">
+              <p>Still stuck? You can continue without AI features and set up Ollama later from Settings.</p>
+              <button class="btn btn-secondary" id="skipFromTroubleshootingBtn" style="margin-top:10px;">Continue Without AI</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Personal Information (split fields) -->
       <div id="step-review" class="step">
-        <h2 style="margin-bottom: 16px;">Your Profile Information</h2>
-        <p style="color: #666; margin-bottom: 24px;">Fill in your information to auto-fill job applications.</p>
-        
-        <div class="profile-preview" id="profilePreview"></div>
-        
-        <!-- Raw JSON Data (Collapsible) -->
-        <div class="raw-data-section">
-          <div class="raw-data-header" id="rawDataToggle">
-            <h4>View Raw Parsed Data</h4>
-            <span class="raw-data-toggle">[+] Show</span>
-          </div>
-          <div class="raw-data-content" id="rawDataContent">
-            <pre class="raw-data-json" id="rawDataJson"></pre>
+        <div class="content-card">
+          <h2 class="step-title">Personal Information</h2>
+          <p class="step-subtitle">Review and edit your details — these fill job applications automatically</p>
+
+          <form id="personalInfoForm" novalidate>
+            <!-- Name row -->
+            <div class="form-row">
+              <div class="form-group">
+                <label class="profile-label">First Name <span class="required">*</span></label>
+                <input type="text" id="piFirstName" name="firstName" class="profile-input" required placeholder="Jane">
+              </div>
+              <div class="form-group">
+                <label class="profile-label">Last Name <span class="required">*</span></label>
+                <input type="text" id="piLastName" name="lastName" class="profile-input" required placeholder="Smith">
+              </div>
+            </div>
+
+            <!-- Email -->
+            <div class="form-group" style="margin-top: 12px;">
+              <label class="profile-label">Email <span class="required">*</span></label>
+              <input type="email" id="piEmail" name="email" class="profile-input" required placeholder="jane@example.com">
+            </div>
+
+            <!-- Phone -->
+            <div class="form-section-header"><h3>Phone Number</h3></div>
+            <div class="form-row">
+              <div class="form-group narrow">
+                <label class="profile-label">Country Code <span class="required">*</span></label>
+                <select id="piPhoneCountryCode" name="phoneCountryCode" class="profile-input" required>
+                  <option value="+1">🇺🇸 United States (+1)</option>
+                  <option value="+1-CA">🇨🇦 Canada (+1)</option>
+                  <option value="+44">🇬🇧 United Kingdom (+44)</option>
+                  <option value="+91">🇮🇳 India (+91)</option>
+                  <option value="+86">🇨🇳 China (+86)</option>
+                  <option value="+81">🇯🇵 Japan (+81)</option>
+                  <option value="+49">🇩🇪 Germany (+49)</option>
+                  <option value="+33">🇫🇷 France (+33)</option>
+                  <option value="+61">🇦🇺 Australia (+61)</option>
+                  <option value="+55">🇧🇷 Brazil (+55)</option>
+                  <option value="+52">🇲🇽 Mexico (+52)</option>
+                  <option value="+65">🇸🇬 Singapore (+65)</option>
+                  <option value="+82">🇰🇷 South Korea (+82)</option>
+                  <option value="+34">🇪🇸 Spain (+34)</option>
+                  <option value="+39">🇮🇹 Italy (+39)</option>
+                  <option value="+31">🇳🇱 Netherlands (+31)</option>
+                  <option value="+46">🇸🇪 Sweden (+46)</option>
+                  <option value="+41">🇨🇭 Switzerland (+41)</option>
+                  <option value="+971">🇦🇪 UAE (+971)</option>
+                  <option value="+other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="profile-label">Phone Number <span class="required">*</span></label>
+                <input type="tel" id="piPhoneNumber" name="phoneNumber" class="profile-input" required placeholder="5551234567">
+                <span class="form-hint">Digits only — no spaces, dashes, or parentheses</span>
+              </div>
+            </div>
+
+            <!-- Location -->
+            <div class="form-section-header"><h3>Location</h3></div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="profile-label">City <span class="required">*</span></label>
+                <input type="text" id="piCity" name="city" class="profile-input" required placeholder="San Francisco">
+              </div>
+              <div class="form-group">
+                <label class="profile-label">State / Province <span class="required">*</span></label>
+                <input type="text" id="piState" name="state" class="profile-input" required placeholder="California">
+              </div>
+            </div>
+            <div class="form-row" style="margin-top: 12px;">
+              <div class="form-group">
+                <label class="profile-label">Country <span class="required">*</span></label>
+                <select id="piCountry" name="country" class="profile-input" required>
+                  <option value="United States">United States</option>
+                  <option value="Canada">Canada</option>
+                  <option value="United Kingdom">United Kingdom</option>
+                  <option value="India">India</option>
+                  <option value="Australia">Australia</option>
+                  <option value="Germany">Germany</option>
+                  <option value="France">France</option>
+                  <option value="Japan">Japan</option>
+                  <option value="China">China</option>
+                  <option value="Brazil">Brazil</option>
+                  <option value="Mexico">Mexico</option>
+                  <option value="Singapore">Singapore</option>
+                  <option value="South Korea">South Korea</option>
+                  <option value="Spain">Spain</option>
+                  <option value="Italy">Italy</option>
+                  <option value="Netherlands">Netherlands</option>
+                  <option value="Sweden">Sweden</option>
+                  <option value="Switzerland">Switzerland</option>
+                  <option value="United Arab Emirates">United Arab Emirates</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="profile-label">ZIP / Postal Code</label>
+                <input type="text" id="piZipCode" name="zipCode" class="profile-input" placeholder="94103">
+              </div>
+            </div>
+          </form>
+
+          <!-- Dynamic section: skills / work / education / summary -->
+          <div id="profilePreview" style="margin-top: 8px;"></div>
+
+          <!-- Raw JSON Data (Collapsible) -->
+          <div class="raw-data-section" style="margin-top: 24px;">
+            <div class="raw-data-header" id="rawDataToggle">
+              <h4>View Raw Parsed Data</h4>
+              <span class="raw-data-toggle">[+] Show</span>
+            </div>
+            <div class="raw-data-content" id="rawDataContent">
+              <pre class="raw-data-json" id="rawDataJson"></pre>
+            </div>
           </div>
         </div>
-        
-        <div class="button-group">
-          <button class="btn btn-secondary" id="backBtn">Back</button>
-          <button class="btn btn-primary" id="saveBtn">Save & Continue</button>
+
+        <div class="button-group" style="margin-top: 24px;">
+          <button class="btn btn-secondary" id="backBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <button class="btn btn-primary" id="saveBtn">
+            Next
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
       </div>
       
-      <!-- Step 3: Self-ID -->
+      <!-- Step 3: Professional Links -->
+      <div id="step-links" class="step">
+        <div class="content-card">
+          <h2 class="step-title">Professional Links</h2>
+          <p class="step-subtitle">Add your online profiles and portfolio</p>
+          
+          <form id="linksForm">
+            <div class="form-group">
+              <label>LinkedIn Profile <span class="required-mark">*</span></label>
+              <input type="url" name="linkedin" id="linksLinkedin" class="profile-input" placeholder="https://linkedin.com/in/johndoe">
+            </div>
+            <div class="form-group">
+              <label>Portfolio URL</label>
+              <input type="url" name="portfolio" id="linksPortfolio" class="profile-input" placeholder="https://johndoe.dev">
+            </div>
+            <div class="form-group">
+              <label>GitHub (Optional)</label>
+              <input type="url" name="github" id="linksGithub" class="profile-input" placeholder="https://github.com/johndoe">
+            </div>
+            <div class="form-group">
+              <label>Other Link (Optional)</label>
+              <input type="url" name="otherLink" id="linksOther" class="profile-input" placeholder="https://example.com">
+            </div>
+          </form>
+        </div>
+        
+        <div class="button-group" style="margin-top: 24px;">
+          <button id="backFromLinksBtn" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <button id="saveLinksBtn" class="btn btn-primary">
+            Next
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Step 4: Self-Identification (voluntary) -->
       <div id="step-selfid" class="step">
-        <h2>Self-Identification</h2>
-        <p class="selfid-intro">We invite you to share some information about yourself. This information has no impact on applications and is kept confidential. It's used at an aggregate level to ensure equal opportunity.</p>
-        
-        <form id="selfIdForm">
-          <!-- Gender Identity -->
-          <div class="question-group">
-            <label class="question-label">Which gender identity do you most identify with?</label>
-            <div class="checkbox-group" id="genderCheckboxGroup">
-              <label><input type="checkbox" name="gender" value="Agender"> Agender</label>
-              <label><input type="checkbox" name="gender" value="Gender non-conforming"> Gender non-conforming</label>
-              <label><input type="checkbox" name="gender" value="Genderfluid"> Genderfluid</label>
-              <label><input type="checkbox" name="gender" value="Genderqueer"> Genderqueer</label>
-              <label><input type="checkbox" name="gender" value="I choose not to disclose"> I choose not to disclose</label>
-              <label><input type="checkbox" name="gender" value="Man"> Man</label>
-              <label><input type="checkbox" name="gender" value="Non-binary"> Non-binary</label>
-              <label><input type="checkbox" name="gender" value="Not Listed"> Not Listed</label>
-              <label><input type="checkbox" name="gender" value="Woman"> Woman</label>
-            </div>
+        <div class="content-card">
+          <h2 class="step-title">Voluntary Self-Identification</h2>
+          <p class="step-subtitle">Many applications include diversity questions. Provide this info once to auto-fill them.</p>
+
+          <div class="privacy-notice">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>All fields are optional. This information stays on your device and is never shared with anyone.</span>
           </div>
 
-          <!-- Race/Ethnicity -->
-          <div class="question-group">
-            <label class="question-label">Which race or ethnicity best describes you? (Select all that apply)</label>
-            <div class="checkbox-group">
-              <label><input type="checkbox" name="race" value="American Indian or Alaskan Native"> American Indian or Alaskan Native</label>
-              <label><input type="checkbox" name="race" value="Asian"> Asian</label>
-              <label><input type="checkbox" name="race" value="Black or African American"> Black or African American</label>
-              <label><input type="checkbox" name="race" value="Hispanic or Latinx"> Hispanic or Latinx</label>
-              <label><input type="checkbox" name="race" value="I choose not to disclose"> I choose not to disclose</label>
-              <label><input type="checkbox" name="race" value="Middle Eastern or North African"> Middle Eastern or North African</label>
-              <label><input type="checkbox" name="race" value="Native Hawaiian or Other Pacific Islander"> Native Hawaiian or Other Pacific Islander</label>
-              <label><input type="checkbox" name="race" value="White"> White</label>
-            </div>
-          </div>
+          <form id="selfIdForm">
 
-          <!-- Sexual Orientation -->
-          <div class="question-group">
-            <label class="question-label">Which sexual orientations do you most identify with? (Select all that apply)</label>
-            <div class="checkbox-group">
-              <label><input type="checkbox" name="orientation" value="Asexual"> Asexual</label>
-              <label><input type="checkbox" name="orientation" value="Bisexual"> Bisexual</label>
-              <label><input type="checkbox" name="orientation" value="Gay"> Gay</label>
-              <label><input type="checkbox" name="orientation" value="Heterosexual"> Heterosexual</label>
-              <label><input type="checkbox" name="orientation" value="I choose not to disclose"> I choose not to disclose</label>
-              <label><input type="checkbox" name="orientation" value="Lesbian"> Lesbian</label>
-              <label><input type="checkbox" name="orientation" value="Not Listed"> Not Listed</label>
-              <label><input type="checkbox" name="orientation" value="Pansexual"> Pansexual</label>
-              <label><input type="checkbox" name="orientation" value="Queer"> Queer</label>
+            <!-- Age -->
+            <div class="selfid-group">
+              <label class="group-label">Age</label>
+              <div class="age-option-row">
+                <label><input type="radio" name="ageOption" value="exact"> Enter exact age</label>
+                <label><input type="radio" name="ageOption" value="range"> Select age range</label>
+                <label><input type="radio" name="ageOption" value="none" checked> Prefer not to say</label>
+              </div>
+              <input type="number" id="selfIdExactAge" min="16" max="100" placeholder="e.g. 28" class="profile-input" style="display:none; max-width: 120px;">
+              <select id="selfIdAgeRange" class="profile-input" style="display:none; max-width: 180px;">
+                <option value="">Select range...</option>
+                <option value="Under 18">Under 18</option>
+                <option value="18-24">18–24</option>
+                <option value="25-34">25–34</option>
+                <option value="35-44">35–44</option>
+                <option value="45-54">45–54</option>
+                <option value="55-64">55–64</option>
+                <option value="65+">65+</option>
+              </select>
             </div>
-          </div>
 
-          <!-- Veteran Status -->
-          <div class="question-group">
-            <label class="question-label">Are you a US veteran?</label>
-            <div class="radio-group">
-              <label><input type="radio" name="veteran" value="Not a veteran"> Not a veteran</label>
-              <label><input type="radio" name="veteran" value="Veteran"> Veteran</label>
-              <label><input type="radio" name="veteran" value="Protected veteran"> Protected veteran</label>
-              <label><input type="radio" name="veteran" value="I choose not to disclose"> I choose not to disclose</label>
+            <!-- Gender -->
+            <div class="selfid-group">
+              <label class="group-label">Gender Identity</label>
+              <span class="group-hint">Select all that apply</span>
+              <div class="checkbox-grid">
+                <label><input type="checkbox" name="gender" value="Male"> Male</label>
+                <label><input type="checkbox" name="gender" value="Female"> Female</label>
+                <label><input type="checkbox" name="gender" value="Non-binary"> Non-binary</label>
+                <label><input type="checkbox" name="gender" value="Genderqueer"> Genderqueer</label>
+                <label><input type="checkbox" name="gender" value="Gender fluid"> Gender fluid</label>
+                <label><input type="checkbox" name="gender" value="Agender"> Agender</label>
+                <label><input type="checkbox" name="gender" value="Two-spirit"> Two-spirit</label>
+                <label><input type="checkbox" name="gender" value="Other" id="genderOtherCheck"> Other</label>
+                <label><input type="checkbox" name="gender" value="Prefer not to say"> Prefer not to say</label>
+              </div>
+              <input type="text" id="genderOtherText" placeholder="Please specify" class="profile-input" style="display:none; margin-top: 6px; max-width: 260px;">
             </div>
-          </div>
 
-          <!-- Transgender Experience -->
-          <div class="question-group">
-            <label class="question-label">Are you a person of transgender experience?</label>
-            <div class="radio-group">
-              <label><input type="radio" name="transgender" value="Yes"> Yes</label>
-              <label><input type="radio" name="transgender" value="No"> No</label>
-              <label><input type="radio" name="transgender" value="I choose not to disclose"> I choose not to disclose</label>
+            <!-- Transgender -->
+            <div class="selfid-group">
+              <label class="group-label">Do you identify as transgender?</label>
+              <div class="radio-list">
+                <label><input type="radio" name="transgender" value="Yes"> Yes</label>
+                <label><input type="radio" name="transgender" value="No"> No</label>
+                <label><input type="radio" name="transgender" value="Decline to self-identify" checked> Decline to self-identify</label>
+              </div>
             </div>
-          </div>
 
-          <!-- Disability Status -->
-          <div class="question-group">
-            <label class="question-label">Would you consider yourself to be a person with a disability?</label>
-            <div class="radio-group">
-              <label><input type="radio" name="disability" value="Yes"> Yes</label>
-              <label><input type="radio" name="disability" value="No"> No</label>
-              <label><input type="radio" name="disability" value="I choose not to disclose"> I choose not to disclose</label>
+            <!-- Ethnicity -->
+            <div class="selfid-group">
+              <label class="group-label">Are you Hispanic or Latino?</label>
+              <div class="radio-list">
+                <label><input type="radio" name="ethnicity" value="Yes, Hispanic or Latino"> Yes, Hispanic or Latino</label>
+                <label><input type="radio" name="ethnicity" value="No, not Hispanic or Latino"> No, not Hispanic or Latino</label>
+                <label><input type="radio" name="ethnicity" value="Prefer not to say" checked> Prefer not to say</label>
+              </div>
             </div>
-          </div>
-        </form>
 
-        <div class="button-group">
-          <button id="backFromSelfIdBtn" class="btn btn-secondary">Back</button>
-          <button id="skipSelfIdBtn" class="btn btn-secondary">Skip</button>
-          <button id="saveSelfIdBtn" class="btn btn-primary">Save & Continue</button>
+            <!-- Race -->
+            <div class="selfid-group">
+              <label class="group-label">Race</label>
+              <span class="group-hint">Select all that apply</span>
+              <div class="checkbox-grid">
+                <label><input type="checkbox" name="race" value="American Indian or Alaska Native"> American Indian or Alaska Native</label>
+                <label><input type="checkbox" name="race" value="Asian"> Asian</label>
+                <label><input type="checkbox" name="race" value="Black or African American"> Black or African American</label>
+                <label><input type="checkbox" name="race" value="Hispanic or Latino"> Hispanic or Latino</label>
+                <label><input type="checkbox" name="race" value="Native Hawaiian or Other Pacific Islander"> Native Hawaiian or Other Pacific Islander</label>
+                <label><input type="checkbox" name="race" value="White"> White</label>
+                <label><input type="checkbox" name="race" value="Two or more races"> Two or more races</label>
+                <label><input type="checkbox" name="race" value="Prefer not to say"> Prefer not to say</label>
+              </div>
+            </div>
+
+            <!-- Veteran Status -->
+            <div class="selfid-group">
+              <label class="group-label">Are you a protected veteran?</label>
+              <span class="group-hint">Includes disabled veterans, recently separated veterans, active duty wartime or campaign badge veterans, and Armed Forces service medal veterans.</span>
+              <div class="radio-list">
+                <label><input type="radio" name="veteran" value="Yes, I am a protected veteran"> Yes, I am a protected veteran</label>
+                <label><input type="radio" name="veteran" value="No, I am not a protected veteran"> No, I am not a protected veteran</label>
+                <label><input type="radio" name="veteran" value="I don't wish to answer" checked> I don't wish to answer</label>
+              </div>
+            </div>
+
+            <!-- Disability -->
+            <div class="selfid-group">
+              <label class="group-label">Do you have a disability?</label>
+              <span class="group-hint">As defined by the ADA: a physical or mental impairment that substantially limits one or more major life activities.</span>
+              <div class="radio-list">
+                <label><input type="radio" name="disability" value="Yes, I have a disability"> Yes, I have a disability (or previously had one)</label>
+                <label><input type="radio" name="disability" value="No, I don't have a disability"> No, I don't have a disability</label>
+                <label><input type="radio" name="disability" value="I don't wish to answer" checked> I don't wish to answer</label>
+              </div>
+            </div>
+
+            <!-- Sexual Orientation -->
+            <div class="selfid-group">
+              <label class="group-label">Sexual Orientation</label>
+              <span class="group-hint">Select all that apply</span>
+              <div class="checkbox-grid">
+                <label><input type="checkbox" name="orientation" value="Heterosexual"> Heterosexual / Straight</label>
+                <label><input type="checkbox" name="orientation" value="Gay"> Gay</label>
+                <label><input type="checkbox" name="orientation" value="Lesbian"> Lesbian</label>
+                <label><input type="checkbox" name="orientation" value="Bisexual"> Bisexual</label>
+                <label><input type="checkbox" name="orientation" value="Pansexual"> Pansexual</label>
+                <label><input type="checkbox" name="orientation" value="Asexual"> Asexual</label>
+                <label><input type="checkbox" name="orientation" value="Queer"> Queer</label>
+                <label><input type="checkbox" name="orientation" value="Questioning"> Questioning</label>
+                <label><input type="checkbox" name="orientation" value="Other"> Other</label>
+                <label><input type="checkbox" name="orientation" value="Prefer not to say"> Prefer not to say</label>
+              </div>
+            </div>
+
+          </form>
+        </div>
+
+        <div class="button-group" style="margin-top: 24px;">
+          <button id="backFromSelfIdBtn" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <button id="saveSelfIdBtn" class="btn btn-primary">
+            Next
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
       </div>
-      
-      <!-- Step 4: Work Authorization -->
+
+      <!-- Step 5: Work Authorization -->
       <div id="step-workauth" class="step">
-        <h2>Work Authorization</h2>
-        <p class="selfid-intro">These questions help us tailor applications to your work eligibility.</p>
+        <div class="content-card">
+        <h2 class="step-title">Work Authorization</h2>
+        <p class="step-subtitle">Help us fill out work eligibility questions</p>
         
         <form id="workAuthForm">
           <!-- US Work Authorization -->
@@ -1104,43 +2411,122 @@
           </div>
         </form>
 
-        <div class="button-group">
-          <button id="backFromWorkAuthBtn" class="btn btn-secondary">Back</button>
-          <button id="skipWorkAuthBtn" class="btn btn-secondary">Skip</button>
-          <button id="saveWorkAuthBtn" class="btn btn-primary">Save & Continue</button>
-        </div>
-      </div>
-
-      <!-- Step 5: Learned Values Management -->
-      <div id="step-learned" class="step">
-        <h2>🧠 Learned Values</h2>
-        <p class="selfid-intro">These are corrections the system learned from your manual edits. You can remove any incorrect patterns.</p>
-        
-        <div id="learnedValuesContainer" style="margin-top: 24px;">
-          <!-- Dynamically populated -->
-        </div>
-
-        <div class="button-group" id="learnedButtonGroup">
-          <button id="doneFromLearnedBtn" class="btn btn-primary">Done</button>
-        </div>
-      </div>
-
-      <!-- Step 6: Success -->
-      <div id="step-success" class="step">
-        <div style="text-align: center; padding: 40px 0;">
-          <div style="font-size: 64px; margin-bottom: 24px;">[✓]</div>
-          <h2 style="margin-bottom: 16px;">Profile Saved Successfully!</h2>
-          <p style="color: #666; margin-bottom: 32px;">You can now visit job application pages and Offlyn will help you fill forms automatically.</p>
-          
-          <div class="button-group">
-            <button class="btn btn-primary" id="viewLearnedBtn">🧠 View Learned Values</button>
-            <button class="btn btn-primary" id="doneBtn">Start Applying</button>
+          <div class="info-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            Your data stays on your device - never uploaded or shared
           </div>
         </div>
+        
+        <div class="button-group" style="margin-top: 24px;">
+          <button id="backFromWorkAuthBtn" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <button id="saveWorkAuthBtn" class="btn btn-primary">
+            Next
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 5: Cover Letter Defaults -->
+      <div id="step-coverletter" class="step">
+        <div class="content-card">
+          <h2 class="step-title">Cover Letter Defaults</h2>
+          <p class="step-subtitle">Set your preferences for AI-generated cover letters</p>
+          
+          <form id="coverLetterForm">
+            <div class="form-group">
+              <label>Preferred Tone</label>
+              <select name="tone" id="clTone">
+                <option value="Professional">Professional</option>
+                <option value="Conversational">Conversational</option>
+                <option value="Enthusiastic">Enthusiastic</option>
+                <option value="Formal">Formal</option>
+                <option value="Confident">Confident</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Key Skills to Highlight</label>
+              <input type="text" name="keySkills" id="clKeySkills" class="profile-input" placeholder="e.g. React, TypeScript, Node.js, GraphQL">
+              <span style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Separate skills with commas</span>
+            </div>
+            <div class="form-group">
+              <label>Additional Instructions (Optional)</label>
+              <textarea name="additionalNotes" id="clNotes" class="profile-textarea" rows="3" placeholder="Any specific things you'd like mentioned in cover letters..."></textarea>
+            </div>
+          </form>
+
+          <div class="info-box" style="margin-top: 20px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            These defaults are used when generating cover letters. You can adjust them for each application.
+          </div>
+        </div>
+        
+        <div class="button-group" style="margin-top: 24px;">
+          <button id="backFromCoverLetterBtn" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <button id="saveCoverLetterBtn" class="btn btn-primary">
+            Next
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 6: Success / Review -->
+      <div id="step-success" class="step">
+        <div class="content-card">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: #e8f5e9; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#558b2f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <h2 class="step-title">Review Your Profile</h2>
+            <p class="step-subtitle">Double-check everything before we save</p>
+          </div>
+          
+          <div id="reviewSummary">
+            <!-- Populated dynamically -->
+          </div>
+
+          <div class="info-box" style="margin-top: 24px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            Your profile is saved locally and never leaves your device
+          </div>
+        </div>
+        
+        <button class="btn btn-primary" id="doneBtn" style="width: 100%; margin-top: 16px; padding: 16px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Save Profile & Get Started
+        </button>
+      </div>
+      <!-- Learned Values Step (also opened standalone via showLearnedValues flag) -->
+      <div id="step-learned" class="step">
+        <div class="content-card">
+          <div style="margin-bottom: 20px;">
+            <h2 class="step-title" style="margin-bottom: 4px;">Learned Values</h2>
+            <p class="step-subtitle">Patterns the extension has learned from your corrections and submissions</p>
+          </div>
+
+          <!-- Pattern cards rendered here by onboarding.ts -->
+          <div id="learnedValuesContainer"></div>
+        </div>
+
+        <!-- Footer buttons rendered by loadLearnedValues() -->
+        <div id="learnedButtonGroup" style="display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap;"></div>
       </div>
     </div>
   </div>
   
+  <!-- Privacy footer -->
+  <div style="text-align: center; padding: 16px 24px 32px; max-width: 760px; width: 100%; margin: 0 auto;">
+    <p style="font-size: 12px; color: #94a3b8; display: flex; align-items: center; justify-content: center; gap: 6px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      All your data is stored locally on your device and never uploaded to any server
+    </p>
+  </div>
+
   <script src="onboarding.js"></script>
 </body>
 </html>

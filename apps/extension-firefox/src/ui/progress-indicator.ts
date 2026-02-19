@@ -1,5 +1,6 @@
 /**
- * Progress indicator - shows progress during autofill
+ * Progress indicator - shows a branded slide-in card during autofill
+ * Brand: navy #1e293b + green #16a34a
  */
 
 let progressElement: HTMLElement | null = null;
@@ -8,166 +9,147 @@ let progressElement: HTMLElement | null = null;
  * Show progress indicator
  */
 export function showProgress(total: number): void {
-  // Remove existing if any
-  hideProgress();
-  
-  // Create progress container
+  hideProgress(0);
+  ensureProgressStyles();
+
   const container = document.createElement('div');
   container.id = 'offlyn-progress-indicator';
   container.style.cssText = `
     position: fixed;
     top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    right: 20px;
     z-index: 2147483647;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    padding: 16px 24px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(30,41,59,0.14), 0 1px 4px rgba(30,41,59,0.08);
+    padding: 14px 16px;
     min-width: 300px;
-    animation: slideInDown 0.3s ease;
+    max-width: 380px;
+    border-left: 4px solid #1e293b;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    animation: offlyn-progress-in 0.25s cubic-bezier(0.16,1,0.3,1) forwards;
   `;
-  
+
   container.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <div class="spinner" style="
-        width: 20px;
-        height: 20px;
-        border: 3px solid #e5e7eb;
-        border-top-color: #667eea;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
+    <div style="display:flex;align-items:flex-start;gap:10px;">
+      <div class="offlyn-spinner" style="
+        flex-shrink:0;
+        margin-top:2px;
+        width:18px;height:18px;
+        border:2.5px solid #e2e8f0;
+        border-top-color:#16a34a;
+        border-radius:50%;
+        animation:offlyn-spin 0.7s linear infinite;
       "></div>
-      <div style="flex: 1;">
+      <div style="flex:1;min-width:0;">
+        <div class="offlyn-progress-title" style="
+          font-weight:600;font-size:13px;color:#1e293b;line-height:1.3;margin-bottom:6px;
+        ">Auto-filling form…</div>
         <div style="
-          font-weight: 600;
-          font-size: 14px;
-          color: #111827;
-          margin-bottom: 8px;
-        ">Auto-filling form...</div>
-        <div style="
-          background: #e5e7eb;
-          height: 6px;
-          border-radius: 3px;
-          overflow: hidden;
+          background:#f1f5f9;height:5px;border-radius:3px;overflow:hidden;
         ">
           <div id="offlyn-progress-bar" style="
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100%;
-            width: 0%;
-            transition: width 0.3s ease;
+            background:linear-gradient(90deg,#16a34a,#22c55e);
+            height:100%;width:0%;
+            border-radius:3px;
+            transition:width 0.25s ease;
           "></div>
         </div>
         <div id="offlyn-progress-text" style="
-          font-size: 12px;
-          color: #6b7280;
-          margin-top: 4px;
+          font-size:11px;color:#64748b;margin-top:5px;
         ">0 / ${total} fields</div>
       </div>
     </div>
   `;
-  
+
   document.body.appendChild(container);
   progressElement = container;
-  
-  // Add spinner animation if not already present
-  if (!document.getElementById('offlyn-progress-styles')) {
-    const style = document.createElement('style');
-    style.id = 'offlyn-progress-styles';
-    style.textContent = `
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-      
-      @keyframes slideInDown {
-        from {
-          opacity: 0;
-          transform: translate(-50%, -20px);
-        }
-        to {
-          opacity: 1;
-          transform: translate(-50%, 0);
-        }
-      }
-      
-      @keyframes slideOutUp {
-        from {
-          opacity: 1;
-          transform: translate(-50%, 0);
-        }
-        to {
-          opacity: 0;
-          transform: translate(-50%, -20px);
-        }
-      }
-    `;
-    document.head.appendChild(style);
-  }
 }
 
 /**
- * Update progress
+ * Update fill progress
  */
 export function updateProgress(current: number, total: number, fieldName?: string): void {
   if (!progressElement) return;
-  
-  const progressBar = progressElement.querySelector('#offlyn-progress-bar') as HTMLElement;
-  const progressText = progressElement.querySelector('#offlyn-progress-text') as HTMLElement;
-  
-  if (progressBar) {
-    const percentage = (current / total) * 100;
-    progressBar.style.width = `${percentage}%`;
-  }
-  
-  if (progressText) {
-    let text = `${current} / ${total} fields`;
-    if (fieldName) {
-      text += ` - ${fieldName}`;
-    }
-    progressText.textContent = text;
-  }
+
+  const bar = progressElement.querySelector('#offlyn-progress-bar') as HTMLElement;
+  const text = progressElement.querySelector('#offlyn-progress-text') as HTMLElement;
+
+  if (bar) bar.style.width = `${Math.round((current / total) * 100)}%`;
+  if (text) text.textContent = fieldName
+    ? `${current} / ${total} fields — ${fieldName}`
+    : `${current} / ${total} fields`;
 }
 
 /**
- * Hide progress indicator
+ * Hide progress indicator (with optional delay)
  */
 export function hideProgress(delay: number = 1000): void {
   if (!progressElement) return;
-  
+  const el = progressElement;
   setTimeout(() => {
-    if (progressElement) {
-      progressElement.style.animation = 'slideOutUp 0.3s ease';
-      setTimeout(() => {
-        progressElement?.remove();
-        progressElement = null;
-      }, 300);
-    }
+    el.style.animation = 'offlyn-progress-out 0.2s ease forwards';
+    setTimeout(() => el.remove(), 200);
   }, delay);
+  progressElement = null;
 }
 
 /**
- * Show completion state
+ * Show completion state then auto-hide
  */
 export function showProgressComplete(success: boolean, filled: number, total: number): void {
   if (!progressElement) return;
-  
-  const spinner = progressElement.querySelector('.spinner') as HTMLElement;
-  const titleEl = progressElement.querySelector('div[style*="font-weight: 600"]') as HTMLElement;
-  
+
+  const spinner = progressElement.querySelector('.offlyn-spinner') as HTMLElement;
+  const title = progressElement.querySelector('.offlyn-progress-title') as HTMLElement;
+  const bar = progressElement.querySelector('#offlyn-progress-bar') as HTMLElement;
+
   if (spinner) {
-    spinner.style.display = 'none';
+    spinner.style.animation = 'none';
+    spinner.style.border = 'none';
+    spinner.innerHTML = success
+      ? `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#16a34a"/><path d="M5.5 9l2.5 2.5 4.5-4.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+      : `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#f59e0b"/><path d="M9 6v3.5M9 11.5h.01" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>`;
   }
-  
-  if (titleEl) {
-    if (success) {
-      titleEl.innerHTML = `✅ Complete! Filled ${filled} / ${total} fields`;
-      titleEl.style.color = '#10b981';
-    } else {
-      titleEl.innerHTML = `⚠️ Partially complete: ${filled} / ${total} fields`;
-      titleEl.style.color = '#f59e0b';
-    }
+
+  if (title) {
+    title.textContent = success
+      ? `Filled ${filled} / ${total} fields`
+      : `Partially filled: ${filled} / ${total}`;
+    title.style.color = success ? '#16a34a' : '#f59e0b';
   }
-  
-  // Hide after showing completion
+
+  if (bar) {
+    bar.style.width = '100%';
+    bar.style.background = success
+      ? 'linear-gradient(90deg,#16a34a,#22c55e)'
+      : 'linear-gradient(90deg,#f59e0b,#fbbf24)';
+  }
+
+  // Re-assign so hideProgress works
+  progressElement = progressElement; // keep reference
   hideProgress(2000);
+}
+
+/**
+ * Inject keyframes once
+ */
+function ensureProgressStyles(): void {
+  if (document.getElementById('offlyn-progress-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'offlyn-progress-styles';
+  style.textContent = `
+    @keyframes offlyn-spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes offlyn-progress-in {
+      from { opacity:0; transform:translateX(24px); }
+      to   { opacity:1; transform:translateX(0); }
+    }
+    @keyframes offlyn-progress-out {
+      from { opacity:1; transform:translateX(0); }
+      to   { opacity:0; transform:translateX(24px); }
+    }
+  `;
+  document.head.appendChild(style);
 }

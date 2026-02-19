@@ -131,18 +131,20 @@ export function ensureFieldSummaryExpanded(): void {
 
 function buildPanelHTML(fields: FieldSchema[], jobTitle?: string, company?: string): string {
   const requiredCount = fields.filter(f => f.required).length;
+  const cubeIconUrl = browser.runtime.getURL('icons/monogram-transparent.png');
+  const headerIconUrl = browser.runtime.getURL('icons/primary-logo.png');
 
   return `
     <!-- Minimized cube (hidden initially) -->
-    <div class="ofl-cube" style="display:none;" title="Click to expand Offlyn">
-      <span class="ofl-cube-logo">O</span>
+    <div class="ofl-cube" style="display:none;" title="Click to expand Offlyn Apply">
+      <img class="ofl-cube-logo" src="${cubeIconUrl}" alt="Offlyn Apply">
     </div>
 
     <!-- Expanded view -->
     <div class="ofl-header">
       <div class="ofl-brand">
-        <span class="ofl-logo">O</span>
-        <span class="ofl-title">Offlyn</span>
+        <img class="ofl-logo" src="${headerIconUrl}" alt="Offlyn Apply">
+        <span class="ofl-title">Offlyn Apply</span>
       </div>
       <div class="ofl-header-actions">
         <button class="ofl-minimize-btn" title="Minimize">&#8722;</button>
@@ -384,30 +386,53 @@ function addStyles(): void {
       box-shadow: 0 4px 16px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08);
     }
     #offlyn-field-summary.ofl-minimized:hover {
-      box-shadow: 0 6px 24px rgba(102, 126, 234, .35);
+      box-shadow: 0 6px 24px rgba(30, 42, 58, 0.25);
       transform: translate(var(--tx, 0), var(--ty, 0)) scale(1.08);
     }
 
-    /* ─── Cube logo ─── */
+    /* ─── Cube logo (oval pill, tusk white, gloss, no border) ─── */
     .ofl-cube {
-      width: 48px;
-      height: 48px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      width: 64px;
+      height: 40px;
+      /* tusk white base + top-half gloss sheen */
+      background:
+        linear-gradient(
+          180deg,
+          rgba(255,255,255,0.55) 0%,
+          rgba(255,255,255,0.06) 50%,
+          rgba(255,255,255,0.00) 51%
+        ),
+        #FFFCF0;
+      border: none;
+      border-radius: 999px;
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 6px 10px;
       cursor: pointer;
+      box-shadow:
+        0 3px 10px rgba(30, 41, 59, 0.20),
+        inset 0 1px 2px rgba(255,255,255,0.90);
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+      overflow: hidden;
+    }
+    .ofl-cube:hover {
+      transform: scale(1.08);
+      box-shadow:
+        0 5px 16px rgba(22, 163, 74, 0.30),
+        inset 0 1px 2px rgba(255,255,255,0.90);
     }
     .ofl-cube-logo {
-      font-weight: 800;
-      font-size: 20px;
-      color: #fff;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
       user-select: none;
+      pointer-events: none;
     }
 
     /* ─── Header ─── */
     .ofl-header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #0F172A;
       padding: 12px 16px;
       display: flex;
       align-items: center;
@@ -420,15 +445,9 @@ function addStyles(): void {
       gap: 8px;
     }
     .ofl-logo {
-      width: 26px; height: 26px;
-      background: rgba(255,255,255,.25);
-      border-radius: 7px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      font-size: 15px;
-      color: #fff;
+      width: 24px; height: 24px;
+      border-radius: 5px;
+      object-fit: contain;
     }
     .ofl-title {
       font-weight: 700;
@@ -493,10 +512,10 @@ function addStyles(): void {
     }
     .ofl-stat { display: flex; align-items: baseline; gap: 5px; }
     .ofl-stat-num {
-      font-size: 22px; font-weight: 700; color: #667eea; line-height: 1;
+      font-size: 22px; font-weight: 700; color: #0F172A; line-height: 1;
     }
-    .ofl-stat-num.ofl-required { color: #f5576c; }
-    .ofl-stat-label { font-size: 12px; color: #999; font-weight: 500; }
+    .ofl-stat-num.ofl-required { color: #EF4444; }
+    .ofl-stat-label { font-size: 12px; color: #64748B; font-weight: 500; }
 
     .ofl-actions { display: flex; flex-direction: column; gap: 8px; }
     .ofl-btn {
@@ -517,21 +536,33 @@ function addStyles(): void {
     }
     .ofl-btn-icon { font-size: 16px; }
     .ofl-btn-fill {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #27E38D;
+      color: #0F172A;
     }
     .ofl-btn-fill:hover {
+      background: #22CC7A;
       transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(102, 126, 234, .4);
+      box-shadow: 0 6px 20px rgba(39, 227, 141, 0.3);
     }
-    .ofl-btn-fill:active { transform: translateY(0); }
+    .ofl-btn-fill:active { 
+      background: #1EB86B;
+      transform: translateY(0); 
+    }
     .ofl-btn-cover {
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      background: #0F172A;
+      color: #FFFFFF;
+      border: 2px solid #27E38D;
     }
     .ofl-btn-cover:hover {
+      background: #1E293B;
+      border-color: #22CC7A;
       transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(240, 147, 251, .4);
+      box-shadow: 0 6px 20px rgba(39, 227, 141, 0.2);
     }
-    .ofl-btn-cover:active { transform: translateY(0); }
+    .ofl-btn-cover:active { 
+      background: #0F172A;
+      transform: translateY(0); 
+    }
 
     .ofl-status {
       text-align: center;
@@ -542,9 +573,9 @@ function addStyles(): void {
       padding: 0 8px;
       transition: all .2s;
     }
-    .ofl-status-info  { color: #667eea; }
-    .ofl-status-success { color: #2e7d32; background: #e8f5e9; padding: 4px 8px; }
-    .ofl-status-error   { color: #c62828; background: #ffebee; padding: 4px 8px; }
+    .ofl-status-info  { color: #0F172A; }
+    .ofl-status-success { color: #0F172A; background: rgba(39, 227, 141, 0.15); padding: 4px 8px; border: 1px solid #27E38D; }
+    .ofl-status-error   { color: #0F172A; background: rgba(239, 68, 68, 0.15); padding: 4px 8px; border: 1px solid #EF4444; }
 
     .ofl-footer {
       padding: 8px 16px;
@@ -556,7 +587,7 @@ function addStyles(): void {
     .ofl-link-btn {
       background: none;
       border: none;
-      color: #999;
+      color: #64748B;
       font-size: 12px;
       cursor: pointer;
       padding: 4px 6px;
@@ -564,7 +595,10 @@ function addStyles(): void {
       transition: all .15s;
       font-family: inherit;
     }
-    .ofl-link-btn:hover { color: #667eea; background: #f5f5ff; }
+    .ofl-link-btn:hover { 
+      color: #0F172A; 
+      background: rgba(39, 227, 141, 0.1); 
+    }
     .ofl-link-btn:disabled { opacity: .5; cursor: default; }
     .ofl-sep { flex: 1; }
   `;

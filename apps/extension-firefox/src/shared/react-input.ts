@@ -41,6 +41,12 @@ export function setReactInputValue(
   value: string
 ): boolean {
   try {
+    // Guard: element must still be in the DOM (Firefox throws DOMException on detached nodes)
+    if (!element.isConnected) {
+      console.warn('[ReactInput] Element is no longer connected to the DOM — skipping');
+      return false;
+    }
+
     // Get the native input value setter
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype,
@@ -134,10 +140,25 @@ export function setReactInputValue(
 export async function setReactInputValueWithRetry(
   element: HTMLInputElement | HTMLTextAreaElement,
   value: string,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  selector?: string  // optional CSS selector for re-querying after React re-renders
 ): Promise<boolean> {
+  let currentElement = element;
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const success = setReactInputValue(element, value);
+    // If the element is stale, try to re-query it by selector before retrying
+    if (!currentElement.isConnected && selector) {
+      const fresh = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | null;
+      if (fresh) {
+        console.log(`[ReactInput] Re-queried element after stale reference (attempt ${attempt + 1})`);
+        currentElement = fresh;
+      } else {
+        console.warn(`[ReactInput] Cannot re-query "${selector}" — element gone from DOM`);
+        return false;
+      }
+    }
+
+    const success = setReactInputValue(currentElement, value);
     
     if (success) {
       console.log(`[ReactInput] ✓ Value set successfully on attempt ${attempt + 1}`);
@@ -147,7 +168,7 @@ export async function setReactInputValueWithRetry(
     // Wait a bit before retrying (React might be re-rendering)
     if (attempt < maxRetries - 1) {
       console.log(`[ReactInput] Retry ${attempt + 1}/${maxRetries - 1}...`);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 150));
     }
   }
   
@@ -279,6 +300,12 @@ export async function fillWithHumanTyping(
   } = options;
   
   try {
+    // Guard: element must still be in the DOM
+    if (!element.isConnected) {
+      console.warn('[HumanTyping] Element is no longer connected to the DOM — skipping');
+      return false;
+    }
+
     // Focus the element
     element.focus();
     element.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
@@ -311,6 +338,12 @@ export async function fillWithHumanTyping(
     
     // Type each character
     for (let i = 0; i < value.length; i++) {
+      // Check if element is still in the DOM on each iteration (React may re-render)
+      if (!element.isConnected) {
+        console.warn('[HumanTyping] Element disconnected from DOM during typing — aborting');
+        return false;
+      }
+
       const char = value[i];
       
       // keydown
@@ -411,7 +444,8 @@ export async function fillWithHumanTyping(
  */
 export async function smartFillField(
   element: HTMLInputElement | HTMLTextAreaElement,
-  value: string
+  value: string,
+  selector?: string  // optional CSS selector for re-querying after React re-renders
 ): Promise<boolean> {
   // For short values (< 50 chars), use human-like typing for best compatibility
   if (value.length < 50) {
@@ -422,17 +456,27 @@ export async function smartFillField(
     }
     console.log('[SmartFill] Human typing failed, falling back to native setter');
   }
+
+  // Re-query element if stale before trying native setter
+  let currentElement = element;
+  if (!currentElement.isConnected && selector) {
+    const fresh = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | null;
+    if (fresh) {
+      console.log('[SmartFill] Re-queried element after stale reference');
+      currentElement = fresh;
+    }
+  }
   
   // For long values or if typing failed, use native setter (much faster)
-  const nativeSuccess = setReactInputValue(element, value);
+  const nativeSuccess = setReactInputValue(currentElement, value);
   if (nativeSuccess) {
     console.log(`[SmartFill] ✓ Native setter succeeded`);
     return true;
   }
   
-  // Final retry with native setter + retry logic
+  // Final retry with native setter + retry logic (passes selector for further re-queries)
   console.log('[SmartFill] Native setter failed, trying with retry');
-  return await setReactInputValueWithRetry(element, value, 3);
+  return await setReactInputValueWithRetry(currentElement, value, 3, selector);
 }
 
 /**

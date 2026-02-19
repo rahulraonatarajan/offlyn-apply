@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Job Applications Dashboard - Offlyn</title>
+  <link rel="icon" type="image/png" sizes="48x48" href="../icons/icon-48.png">
+  <title>Application Dashboard - Offlyn Apply</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     * {
@@ -14,60 +15,102 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #f8fafc;
       min-height: 100vh;
-      padding: 20px;
+      margin: 0;
+      padding: 0;
       color: #1a1a1a;
-    }
-
-    .container {
-      max-width: 1600px;
-      margin: 0 auto;
     }
 
     /* Header */
     .header {
-      background: rgba(255, 255, 255, 0.95);
-      padding: 25px 30px;
-      border-radius: 15px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-      margin-bottom: 25px;
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      padding: 0;
+    }
+
+    .header-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
 
-    .header-left h1 {
-      color: #2d3748;
-      font-size: 1.8em;
-      margin-bottom: 5px;
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
 
-    .header-left .subtitle {
-      color: #718096;
-      font-size: 0.9em;
+    .header-brand img {
+      height: 40px;
+      width: auto;
+      object-fit: contain;
+    }
+
+    .header-brand h1 {
+      font-size: 1.25em;
+      color: #1e293b;
+      font-weight: 600;
+    }
+
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 6px 12px;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-back:hover {
+      background: #f1f5f9;
+      color: #1e293b;
+    }
+
+    .btn-learned {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: 1px solid #27E38D;
+      color: #0F172A;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 6px 14px;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-learned:hover {
+      background: #27E38D;
+      color: #0F172A;
     }
 
     .header-actions {
       display: flex;
+      align-items: center;
       gap: 10px;
     }
 
-    .header-actions button {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-
-    .header-actions button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
     }
 
     /* Stats Cards */
@@ -79,20 +122,22 @@
     }
 
     .stat-card {
-      background: rgba(255, 255, 255, 0.95);
+      background: #fff;
       padding: 20px;
       border-radius: 12px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
       text-align: center;
       transition: transform 0.3s;
+      border: 1px solid #e5e7eb;
     }
 
     .stat-card:hover {
       transform: translateY(-3px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
 
     .stat-card .number {
-      font-size: 2.5em;
+      font-size: 2.2em;
       font-weight: bold;
       margin-bottom: 5px;
     }
@@ -105,96 +150,191 @@
       font-weight: 600;
     }
 
-    .stat-card.total .number { color: #667eea; }
-    .stat-card.submitted .number { color: #4299e1; }
-    .stat-card.interviewing .number { color: #ed8936; }
-    .stat-card.rejected .number { color: #f56565; }
-    .stat-card.accepted .number { color: #48bb78; }
-    .stat-card.rate .number { color: #805ad5; }
+    .stat-card.total .number { color: #334155; }
+    .stat-card.submitted .number { color: #3b82f6; }
+    .stat-card.interviewing .number { color: #16a34a; }
+    .stat-card.rejected .number { color: #ef4444; }
+    .stat-card.accepted .number { color: #8b5cf6; }
+    .stat-card.rate .number { color: #334155; }
 
-    /* Kanban Board */
-    .kanban-container {
-      background: rgba(255, 255, 255, 0.95);
-      border-radius: 15px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-      padding: 25px;
-      margin-bottom: 25px;
-    }
-
-    .kanban-header {
+    /* Toolbar: search + filter + export */
+    .toolbar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 12px;
       margin-bottom: 20px;
     }
 
-    .kanban-header h2 {
-      color: #2d3748;
-      font-size: 1.3em;
+    .toolbar-search {
+      position: relative;
+      flex: 1;
     }
 
-    .search-box {
-      display: flex;
-      gap: 10px;
+    .toolbar-search svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #94a3b8;
+      pointer-events: none;
     }
 
-    .search-box input {
-      padding: 8px 15px;
-      border: 2px solid #e2e8f0;
+    .toolbar-search input {
+      width: 100%;
+      padding: 9px 12px 9px 36px;
+      border: 1px solid #e2e8f0;
       border-radius: 8px;
       font-size: 14px;
-      min-width: 250px;
       font-family: inherit;
+      color: #1e293b;
+      background: #fff;
     }
 
-    .search-box input:focus {
+    .toolbar-search input:focus {
       outline: none;
-      border-color: #667eea;
+      border-color: #94a3b8;
+      box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.2);
+    }
+
+    .toolbar-filter select {
+      padding: 9px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      color: #334155;
+      background: #fff;
+      cursor: pointer;
+      min-width: 140px;
+    }
+
+    .toolbar-filter select:focus {
+      outline: none;
+      border-color: #94a3b8;
+    }
+
+    .btn-export {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #16a34a;
+      color: white;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-export:hover {
+      background: #15803d;
+      box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+    }
+
+    .btn-test-data {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #F59E0B;
+      color: #0F172A;
+      border: none;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-test-data:hover {
+      background: #D97706;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-clear-data {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      color: #ef4444;
+      border: 1px solid #ef4444;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-clear-data:hover {
+      background: #fef2f2;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
+    }
+
+    /* Kanban Board */
+    .kanban-container {
+      margin-bottom: 25px;
     }
 
     .kanban-board {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
     }
 
     .kanban-column {
-      background: #f7fafc;
-      border-radius: 12px;
-      padding: 15px;
-      min-height: 400px;
-      transition: background 0.2s;
-    }
-
-    .kanban-column.drag-over {
-      background: #ebf4ff;
-      outline: 2px dashed #667eea;
-      outline-offset: -4px;
+      display: flex;
+      flex-direction: column;
     }
 
     .column-header {
+      background: #fff;
+      border-radius: 8px 8px 0 0;
+      border-top: 4px solid #e2e8f0;
+      padding: 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 12px;
-      margin-bottom: 12px;
-      border-radius: 8px;
       font-weight: 600;
       font-size: 0.9em;
+      color: #334155;
     }
+
+    .kanban-column[data-status="submitted"] .column-header { border-top-color: #3b82f6; }
+    .kanban-column[data-status="interviewing"] .column-header { border-top-color: #22c55e; }
+    .kanban-column[data-status="rejected"] .column-header { border-top-color: #ef4444; }
+    .kanban-column[data-status="accepted"] .column-header { border-top-color: #8b5cf6; }
+    .kanban-column[data-status="withdrawn"] .column-header { border-top-color: #64748b; }
 
     .column-header .count {
-      background: rgba(255, 255, 255, 0.9);
+      background: #f1f5f9;
+      color: #64748b;
       padding: 2px 8px;
       border-radius: 12px;
-      font-size: 0.85em;
+      font-size: 0.82em;
+      font-weight: 600;
     }
 
-    .column-header.submitted { background: #bee3f8; color: #2c5282; }
-    .column-header.interviewing { background: #feebc8; color: #7c2d12; }
-    .column-header.rejected { background: #fed7d7; color: #742a2a; }
-    .column-header.accepted { background: #c6f6d5; color: #22543d; }
-    .column-header.withdrawn { background: #e2e8f0; color: #4a5568; }
+    .column-cards {
+      background: #f1f5f9;
+      border-radius: 0 0 8px 8px;
+      padding: 8px;
+      min-height: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .kanban-column.drag-over .column-cards {
+      background: #dcfce7;
+      outline: 2px dashed #16a34a;
+      outline-offset: -4px;
+    }
 
     .column-cards {
       display: flex;
@@ -219,8 +359,8 @@
 
     .app-card:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.15);
-      border-color: #667eea;
+      box-shadow: 0 6px 20px rgba(30, 42, 58, 0.15);
+      border-color: #1e2a3a;
     }
 
     .app-card.dragging {
@@ -312,10 +452,11 @@
     }
 
     .chart-card {
-      background: rgba(255, 255, 255, 0.95);
+      background: #fff;
       padding: 25px;
       border-radius: 15px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e5e7eb;
     }
 
     .chart-card h3 {
@@ -398,7 +539,7 @@
 
     .btn-primary {
       flex: 1;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #16a34a;
       color: white;
       border: none;
       padding: 10px 20px;
@@ -445,7 +586,7 @@
 
     .loading-spinner {
       border: 4px solid #e2e8f0;
-      border-top: 4px solid #667eea;
+      border-top: 4px solid #16a34a;
       border-radius: 50%;
       width: 40px;
       height: 40px;
@@ -476,23 +617,32 @@
   </style>
 </head>
 <body>
-  <div class="container">
-    <!-- Header -->
-    <div class="header">
-      <div class="header-left">
-        <h1>Job Applications Dashboard</h1>
-        <div class="subtitle" id="dateRange">Loading...</div>
+  <!-- Sticky Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <img src="../icons/primary-logo.png" alt="Offlyn Apply">
+        <h1>Application Dashboard</h1>
       </div>
       <div class="header-actions">
-        <button id="exportBtn">Export CSV</button>
+        <button id="viewLearnedValuesBtn" class="btn-learned">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
+          Learned Values
+        </button>
+        <a href="../home/home.html" class="btn-back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to Home
+        </a>
       </div>
     </div>
+  </header>
 
+  <div class="container">
     <!-- Stats Cards -->
     <div class="stats">
       <div class="stat-card total">
         <div class="number" id="statTotal">0</div>
-        <div class="label">Total</div>
+        <div class="label">Total Applications</div>
       </div>
       <div class="stat-card submitted">
         <div class="number" id="statSubmitted">0</div>
@@ -516,22 +666,6 @@
       </div>
     </div>
 
-    <!-- Kanban Board -->
-    <div class="kanban-container">
-      <div class="kanban-header">
-        <h2>Applications</h2>
-        <div class="search-box">
-          <input type="text" id="searchInput" placeholder="Search by company or position...">
-        </div>
-      </div>
-      <div id="kanbanContent">
-        <div class="loading">
-          <div class="loading-spinner"></div>
-          <p>Loading applications...</p>
-        </div>
-      </div>
-    </div>
-
     <!-- Charts -->
     <div class="charts">
       <div class="chart-card">
@@ -544,6 +678,44 @@
         <h3>Status Distribution</h3>
         <div class="chart-container">
           <canvas id="statusChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search / Filter / Export Toolbar -->
+    <div class="toolbar">
+      <div class="toolbar-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Search by company, position, or notes...">
+      </div>
+      <div class="toolbar-filter">
+        <select id="filterStatus" aria-label="Filter by status">
+          <option value="all">All Status</option>
+          <option value="submitted">Submitted</option>
+          <option value="interviewing">Interviewing</option>
+          <option value="rejected">Rejected</option>
+          <option value="accepted">Accepted</option>
+          <option value="withdrawn">Withdrawn</option>
+        </select>
+      </div>
+      <button class="btn-export" id="exportBtn" aria-label="Export applications as CSV">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export CSV
+      </button>
+      <button class="btn-test-data" id="generateTestDataBtn" title="Generate sample data for testing">
+        Generate Test Data
+      </button>
+      <button class="btn-clear-data" id="clearDataBtn" title="Clear all application data">
+        Clear All Data
+      </button>
+    </div>
+
+    <!-- Kanban Board -->
+    <div class="kanban-container">
+      <div id="kanbanContent">
+        <div class="loading">
+          <div class="loading-spinner"></div>
+          <p>Loading applications...</p>
         </div>
       </div>
     </div>
@@ -578,7 +750,7 @@
         </div>
         <div class="form-actions">
           <button type="submit" class="btn-primary">Save</button>
-          <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+          <button type="button" class="btn-secondary" id="cancelEditBtn">Cancel</button>
         </div>
       </form>
     </div>

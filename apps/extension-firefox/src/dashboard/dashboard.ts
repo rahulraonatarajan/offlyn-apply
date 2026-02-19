@@ -46,10 +46,16 @@ async function init() {
  */
 async function loadDashboardData() {
   try {
+    console.log('[Dashboard] Loading data...');
     allApplications = await getAllApplications();
     filteredApplications = [...allApplications];
+    console.log('[Dashboard] Loaded', allApplications.length, 'applications');
+
+    if (allApplications.length === 0) {
+      console.warn('[Dashboard] No applications found. User may not have submitted any applications yet, or use "Generate Test Data" to populate.');
+    }
   } catch (err) {
-    console.error('Failed to load dashboard data:', err);
+    console.error('[Dashboard] Failed to load dashboard data:', err);
     showError('Failed to load applications data');
   }
 }
@@ -61,6 +67,10 @@ function setupEventListeners() {
   // Search input
   const searchInput = document.getElementById('searchInput') as HTMLInputElement;
   searchInput?.addEventListener('input', handleSearch);
+
+  // Filter dropdown
+  const filterStatus = document.getElementById('filterStatus') as HTMLSelectElement;
+  filterStatus?.addEventListener('change', handleSearch);
   
   // Export button
   const exportBtn = document.getElementById('exportBtn');
@@ -69,6 +79,28 @@ function setupEventListeners() {
   // Edit form
   const editForm = document.getElementById('editForm');
   editForm?.addEventListener('submit', handleEditSubmit);
+
+  // Cancel edit button (replaces inline onclick to satisfy CSP)
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  cancelEditBtn?.addEventListener('click', closeEditModal);
+
+  // Test data buttons
+  const generateTestDataBtn = document.getElementById('generateTestDataBtn');
+  generateTestDataBtn?.addEventListener('click', generateTestData);
+
+  const clearDataBtn = document.getElementById('clearDataBtn');
+  clearDataBtn?.addEventListener('click', clearAllData);
+
+  // Learned Values button — set the deep-link flag and open the onboarding page
+  const viewLearnedBtn = document.getElementById('viewLearnedValuesBtn');
+  viewLearnedBtn?.addEventListener('click', async () => {
+    try {
+      await browser.storage.local.set({ showLearnedValues: true });
+      window.location.href = '../onboarding/onboarding.html';
+    } catch (err) {
+      console.error('[Dashboard] Failed to open learned values:', err);
+    }
+  });
 }
 
 /**
@@ -347,8 +379,7 @@ function closeEditModal() {
   currentEditingApp = null;
 }
 
-// Expose to global scope for HTML onclick
-(window as any).closeEditModal = closeEditModal;
+// closeEditModal is wired via addEventListener in setupEventListeners — no global needed
 
 /**
  * Handle delete button click
@@ -377,19 +408,19 @@ async function handleDelete(appId: string) {
  */
 function handleSearch() {
   const searchInput = document.getElementById('searchInput') as HTMLInputElement;
+  const filterStatus = document.getElementById('filterStatus') as HTMLSelectElement;
   const searchTerm = searchInput?.value.toLowerCase() || '';
-  
-  if (searchTerm) {
-    filteredApplications = allApplications.filter(app => {
-      const matchesTitle = app.jobTitle.toLowerCase().includes(searchTerm);
-      const matchesCompany = app.company.toLowerCase().includes(searchTerm);
-      const matchesNotes = app.notes?.toLowerCase().includes(searchTerm) || false;
-      
-      return matchesTitle || matchesCompany || matchesNotes;
-    });
-  } else {
-    filteredApplications = [...allApplications];
-  }
+  const statusFilter = filterStatus?.value || 'all';
+
+  filteredApplications = allApplications.filter(app => {
+    const matchesSearch = !searchTerm || (
+      app.jobTitle.toLowerCase().includes(searchTerm) ||
+      app.company.toLowerCase().includes(searchTerm) ||
+      (app.notes?.toLowerCase().includes(searchTerm) ?? false)
+    );
+    const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
   
   renderKanbanBoard();
 }
@@ -435,8 +466,8 @@ function renderTrendChart(trends: DailyTrend[]) {
         {
           label: 'Total',
           data: trends.map(t => t.total),
-          borderColor: '#667eea',
-          backgroundColor: 'rgba(102, 126, 234, 0.1)',
+          borderColor: '#1e2a3a',
+          backgroundColor: 'rgba(30, 42, 58, 0.1)',
           tension: 0.4,
           fill: true,
         },
@@ -632,6 +663,138 @@ function showError(message: string) {
       </div>
     `;
   }
+}
+
+/**
+ * Generate realistic test data for development/demo
+ */
+async function generateTestData() {
+  console.log('[Dashboard] Generating test data...');
+
+  const companies = [
+    'TechCorp', 'DataBricks', 'StartupXYZ', 'MegaCorp', 'InnovateLabs',
+    'CloudServices Inc', 'AI Solutions', 'DevTools Co', 'AppMakers', 'CodeFactory',
+  ];
+
+  const positions = [
+    'Software Engineer', 'Senior Frontend Developer', 'Backend Engineer',
+    'Full Stack Developer', 'DevOps Engineer', 'Data Scientist',
+    'Product Manager', 'UX Designer', 'Engineering Manager', 'Staff Engineer',
+  ];
+
+  const atsHints = ['Lever', 'Greenhouse', 'Workday', 'LinkedIn', null];
+  const statuses: JobApplication['status'][] = [
+    'submitted', 'submitted', 'submitted', 'submitted', // More submitted
+    'interviewing', 'interviewing',
+    'rejected',
+    'accepted',
+  ];
+
+  try {
+    const count = 12;
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    for (let i = 0; i < count; i++) {
+      const daysAgo = Math.floor(Math.random() * 30);
+      const timestamp = now - (daysAgo * dayMs);
+      const date = new Date(timestamp).toISOString().split('T')[0];
+
+      const app: JobApplication = {
+        jobTitle: positions[Math.floor(Math.random() * positions.length)],
+        company: companies[Math.floor(Math.random() * companies.length)],
+        url: `https://jobs.example.com/test-${timestamp}-${i}`,
+        atsHint: atsHints[Math.floor(Math.random() * atsHints.length)] ?? null,
+        timestamp,
+        status: statuses[Math.floor(Math.random() * statuses.length)],
+        id: `test_${timestamp}_${i}`,
+        notes: Math.random() > 0.7 ? 'Follow up next week' : undefined,
+      };
+
+      const key = `dailySummary_${date}`;
+      const existing = await browser.storage.local.get(key);
+      const summary = existing[key] || { date, applications: [], lastSentAt: null };
+
+      // Avoid duplicate URLs
+      if (!summary.applications.some((a: JobApplication) => a.url === app.url)) {
+        summary.applications.push(app);
+        await browser.storage.local.set({ [key]: summary });
+      }
+    }
+
+    console.log('[Dashboard] Generated', count, 'test applications');
+
+    // Reload page to cleanly re-initialize with new data
+    location.reload();
+  } catch (err) {
+    console.error('[Dashboard] Failed to generate test data:', err);
+    showError('Failed to generate test data');
+  }
+}
+
+/**
+ * Clear all application data (useful for testing)
+ */
+async function clearAllData() {
+  const confirmed = confirm(
+    'Are you sure you want to delete ALL application data? This cannot be undone.'
+  );
+
+  if (!confirmed) return;
+
+  try {
+    console.log('[Dashboard] Clearing all data...');
+
+    // Build keys for past 365 days and remove any that exist
+    const keysToRemove: string[] = [];
+    const today = new Date();
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - i);
+      keysToRemove.push(`dailySummary_${d.toISOString().split('T')[0]}`);
+    }
+
+    await browser.storage.local.remove(keysToRemove);
+    console.log('[Dashboard] Cleared', keysToRemove.length, 'daily summaries');
+
+    location.reload();
+  } catch (err) {
+    console.error('[Dashboard] Failed to clear data:', err);
+    showError('Failed to clear data');
+  }
+}
+
+/**
+ * Show a temporary success notification
+ */
+function showSuccess(message: string) {
+  // Reuse the error container area with success styling
+  const existing = document.getElementById('successToast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'successToast';
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #0F172A;
+    color: #27E38D;
+    padding: 14px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    z-index: 9999;
+    transition: opacity 0.3s;
+  `;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
 }
 
 // Initialize when DOM is ready

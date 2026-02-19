@@ -3,6 +3,8 @@
  * No native messaging needed - just talk to Ollama's HTTP API directly
  */
 
+import { getOllamaConfig } from './ollama-config';
+
 export interface Message {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -31,6 +33,22 @@ export class OllamaClient {
   constructor(baseUrl?: string, model?: string) {
     if (baseUrl) this.baseUrl = baseUrl;
     if (model) this.model = model;
+    // Load stored config asynchronously (won't block construction)
+    this.loadStoredConfig();
+  }
+
+  private async loadStoredConfig(): Promise<void> {
+    try {
+      const config = await getOllamaConfig();
+      if (config.enabled) {
+        this.baseUrl = config.endpoint;
+        this.model = config.chatModel;
+        this.embeddingModel = config.embeddingModel;
+        console.log('[Ollama] Loaded config from storage:', config.endpoint, config.chatModel);
+      }
+    } catch (err) {
+      console.warn('[Ollama] Failed to load stored config, using defaults:', err);
+    }
   }
 
   /**

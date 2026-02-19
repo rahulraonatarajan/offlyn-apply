@@ -154,7 +154,7 @@ function registerFieldTile(field: FieldSchema, element: HTMLElement): void {
   // Hover highlights the field
   tile.addEventListener('mouseenter', () => {
     element.style.transition = 'box-shadow 0.2s ease';
-    element.style.boxShadow = '0 0 0 2px rgba(102, 126, 234, 0.25)';
+    element.style.boxShadow = '0 0 0 2px rgba(30, 42, 58, 0.2)';
   });
   tile.addEventListener('mouseleave', () => {
     element.style.boxShadow = '';
@@ -392,13 +392,13 @@ function injectTileStyles(): void {
       gap: 3px;
       padding: 2px 8px 2px 5px;
       background: rgba(255, 255, 255, 0.92);
-      border: 1px solid rgba(102, 126, 234, 0.3);
+      border: 1px solid rgba(30, 42, 58, 0.2);
       border-radius: 10px;
       cursor: pointer;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 10px;
       font-weight: 500;
-      color: #7c83db;
+      color: #1e2a3a;
       white-space: nowrap;
       user-select: none;
       pointer-events: auto;
@@ -409,14 +409,14 @@ function injectTileStyles(): void {
     }
 
     .offlyn-ai-tile:hover {
-      background: rgba(102, 126, 234, 0.1);
-      border-color: rgba(102, 126, 234, 0.5);
-      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.18);
-      color: #5b63d3;
+      background: rgba(124, 179, 66, 0.08);
+      border-color: rgba(30, 42, 58, 0.35);
+      box-shadow: 0 2px 8px rgba(30, 42, 58, 0.15);
+      color: #558b2f;
     }
 
     .offlyn-ai-tile:active {
-      box-shadow: 0 1px 2px rgba(102, 126, 234, 0.12);
+      box-shadow: 0 1px 2px rgba(30, 42, 58, 0.1);
     }
 
     .offlyn-ai-tile--loading {

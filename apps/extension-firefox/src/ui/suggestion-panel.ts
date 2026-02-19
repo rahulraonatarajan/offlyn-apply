@@ -266,8 +266,8 @@ function highlightField(selector: string): void {
   activeHighlight = selector;
 
   el.style.transition = 'outline .2s, box-shadow .2s';
-  el.style.outline = '3px solid #667eea';
-  el.style.boxShadow = '0 0 0 6px rgba(102,126,234,.25)';
+  el.style.outline = '3px solid #1e2a3a';
+  el.style.boxShadow = '0 0 0 6px rgba(30,42,58,.25)';
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   // Gentle pulse
@@ -386,7 +386,7 @@ function injectStyles(): void {
 /* ── Header ── */
 .osp-header {
   padding: 16px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1e2a3a 0%, #7cb342 100%);
   color: #fff;
   display: flex;
   align-items: center;
@@ -427,7 +427,7 @@ function injectStyles(): void {
   background: #fff;
   transition: border-color .2s, opacity .2s;
 }
-.osp-card:hover { border-color: #667eea; }
+.osp-card:hover { border-color: #1e2a3a; }
 .osp-card--disabled { opacity: .45; }
 .osp-card--disabled:hover { border-color: #e5e7eb; }
 .osp-card--applied {
@@ -446,7 +446,7 @@ function injectStyles(): void {
 }
 .osp-toggle {
   width: 16px; height: 16px; cursor: pointer;
-  accent-color: #667eea; flex-shrink: 0;
+  accent-color: #1e2a3a; flex-shrink: 0;
 }
 .osp-card-label {
   font-weight: 600; font-size: 13px; color: #111827;
@@ -456,8 +456,8 @@ function injectStyles(): void {
   transition: text-decoration-color .15s;
 }
 .osp-card-label:hover {
-  text-decoration-color: #667eea;
-  color: #667eea;
+  text-decoration-color: #1e2a3a;
+  color: #1e2a3a;
 }
 .osp-badge {
   color: #fff; font-size: 10px; font-weight: 700;
@@ -465,15 +465,15 @@ function injectStyles(): void {
   flex-shrink: 0;
 }
 .osp-btn-single {
-  background: #eef2ff; color: #667eea;
+  background: #eef2ff; color: #1e2a3a;
   border: 1px solid #c7d2fe; border-radius: 6px;
   padding: 3px 10px; font-size: 11px; font-weight: 600;
   cursor: pointer; transition: all .15s;
   flex-shrink: 0; font-family: inherit;
 }
 .osp-btn-single:hover {
-  background: #667eea; color: #fff;
-  border-color: #667eea;
+  background: #1e2a3a; color: #fff;
+  border-color: #1e2a3a;
 }
 .osp-btn-single:disabled {
   opacity: .5; cursor: default;
@@ -491,9 +491,9 @@ function injectStyles(): void {
   border-radius: 8px; cursor: pointer;
   transition: border-color .15s, background .15s;
 }
-.osp-option:hover { border-color: #c7d2fe; background: #f8f9ff; }
-.osp-option--selected { border-color: #667eea; background: #eef2ff; }
-.osp-option input[type=radio] { margin-top: 3px; accent-color: #667eea; flex-shrink: 0; }
+.osp-option:hover { border-color: rgba(124, 179, 66, 0.4); background: #f0f7e8; }
+.osp-option--selected { border-color: #1e2a3a; background: #f0f7e8; }
+.osp-option input[type=radio] { margin-top: 3px; accent-color: #1e2a3a; flex-shrink: 0; }
 
 .osp-option-body { flex: 1; min-width: 0; }
 .osp-option-value {
@@ -510,8 +510,8 @@ function injectStyles(): void {
   text-transform: uppercase; color: #fff;
 }
 .osp-source--profile { background: #3b82f6; }
-.osp-source--contextual { background: #8b5cf6; }
-.osp-source--ai { background: #ec4899; }
+.osp-source--contextual { background: #1e2a3a; }
+.osp-source--ai { background: #7cb342; }
 .osp-source--learned { background: #10b981; }
 .osp-reason {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -537,11 +537,11 @@ function injectStyles(): void {
 }
 .osp-btn-cancel:hover { background: #f3f4f6; }
 .osp-btn-apply {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1e2a3a 0%, #7cb342 100%);
   color: #fff;
 }
 .osp-btn-apply:hover {
-  box-shadow: 0 4px 14px rgba(102,126,234,.4);
+  box-shadow: 0 4px 14px rgba(30, 42, 58, 0.3);
   transform: translateY(-1px);
 }
 .osp-btn-apply:active { transform: translateY(0); }

@@ -24,6 +24,57 @@ const connectionState: ConnectionState = {
 const tabJobInfo: Map<number, TabJobInfo> = new Map();
 
 /**
+ * Generic/garbage job titles that appear on job board listing pages
+ * rather than on actual ATS application forms.
+ * Used to filter out false-positive SUBMIT_ATTEMPT captures.
+ */
+const GENERIC_JOB_TITLES = new Set([
+  'apply for this job',
+  'apply now',
+  'apply to this job',
+  'apply to this position',
+  'submit application',
+  'submit your application',
+  'job application',
+  'application form',
+  'apply',
+  'apply here',
+  'apply today',
+  'apply online',
+  'apply for this position',
+  'apply for this role',
+  'apply for job',
+  'easy apply',
+  'quick apply',
+]);
+
+const GENERIC_COMPANY_NAMES = new Set([
+  'job-boards',
+  'job boards',
+  'jobs',
+  'careers',
+  'jobboard',
+  'job board',
+  'career',
+  'hiring',
+  'recruiter',
+  'recruitment',
+  'talent',
+  'hr',
+  'human resources',
+]);
+
+/**
+ * Returns true if the job title or company name looks like a generic
+ * listing-page artifact rather than a real application entry.
+ */
+function isGenericJobEntry(jobTitle: string, company: string): boolean {
+  const titleNorm = jobTitle.trim().toLowerCase();
+  const companyNorm = company.trim().toLowerCase();
+  return GENERIC_JOB_TITLES.has(titleNorm) || GENERIC_COMPANY_NAMES.has(companyNorm);
+}
+
+/**
  * Check Ollama connection status
  */
 async function checkOllamaConnection(): Promise<void> {
@@ -234,17 +285,39 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
       await setTabJobInfo(tabId, jobInfo);
       
       // Track application for daily summary - ONLY on actual submission, not detection
-      if (event.eventType === 'SUBMIT_ATTEMPT' && event.jobMeta.jobTitle && event.jobMeta.company) {
-        const app: JobApplication = {
+      if (event.eventType === 'SUBMIT_ATTEMPT') {
+        console.log('[Background] SUBMIT_ATTEMPT event received:', {
           jobTitle: event.jobMeta.jobTitle,
           company: event.jobMeta.company,
           url: event.jobMeta.url,
-          atsHint: event.jobMeta.atsHint,
-          timestamp: Date.now(),
-          status: 'submitted',
-        };
-        await addJobApplication(app);
-        log(`Tracked submitted application:`, app.jobTitle, 'at', app.company);
+        });
+
+        if (!event.jobMeta.jobTitle) {
+          console.warn('[Background] Skipping application - missing jobTitle');
+        }
+        if (!event.jobMeta.company) {
+          console.warn('[Background] Skipping application - missing company');
+        }
+
+        if (event.jobMeta.jobTitle && event.jobMeta.company) {
+          // Skip generic/garbage titles that come from job board listing pages
+          // rather than the actual ATS application form
+          if (isGenericJobEntry(event.jobMeta.jobTitle, event.jobMeta.company)) {
+            console.warn('[Background] Skipping generic/invalid entry:', event.jobMeta.jobTitle, 'at', event.jobMeta.company);
+          } else {
+            const app: JobApplication = {
+              jobTitle: event.jobMeta.jobTitle,
+              company: event.jobMeta.company,
+              url: event.jobMeta.url,
+              atsHint: event.jobMeta.atsHint,
+              timestamp: Date.now(),
+              status: 'submitted',
+            };
+            await addJobApplication(app);
+            console.log('[Background] Application tracked:', app.jobTitle, 'at', app.company);
+            log(`Tracked submitted application:`, app.jobTitle, 'at', app.company);
+          }
+        }
       }
       
       return;
@@ -345,7 +418,7 @@ function createContextMenus(): void {
   // Parent menu
   browser.menus.create({
     id: 'offlyn-text-transform',
-    title: 'Offlyn AI',
+    title: 'Offlyn Apply',
     contexts: ['editable'],
   });
 

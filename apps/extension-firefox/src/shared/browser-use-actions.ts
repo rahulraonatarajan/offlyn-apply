@@ -12,7 +12,7 @@ import type { JobMeta } from './types';
 import { analyzeFieldsWithOllama } from './ollama-service';
 import { getEmbedding, cosineSimilarity, smartMatchDropdown } from './ollama-service';
 import { generateFillMappings } from './autofill';
-import { learningSystem } from './learning-system';
+import { rlSystem } from './learning-rl';
 
 /** Action types matching browser-use's action schema */
 export type BrowserUseAction =
@@ -174,16 +174,16 @@ export async function getFieldValuesWithEmbeddings(
     bySelector.set(m.selector, m.value);
   }
   
-  // Override rule-based mappings with learned corrections (user corrections
+  // Override rule-based mappings with RL learned corrections (user corrections
   // take priority over profile data). Also fills fields that rule-based
   // matching missed but the user has previously corrected.
   for (const field of schema) {
     if (field.type === 'file' || !field.selector) continue;
-    const learned = learningSystem.getLearnedValue(field);
+    const learned = rlSystem.getLearnedValue(field);
     if (learned) {
       const previousValue = bySelector.get(field.selector);
       if (previousValue !== learned.value) {
-        console.log(`[Browser-Use] Learning override for "${field.label}": "${previousValue ?? '(empty)'}" → "${learned.value}" (confidence: ${learned.confidence.toFixed(2)})`);
+        console.log(`[Browser-Use] RL override for "${field.label}": "${previousValue ?? '(empty)'}" → "${learned.value}" (confidence: ${learned.confidence.toFixed(2)})`);
       }
       bySelector.set(field.selector, learned.value);
     }
@@ -200,7 +200,11 @@ export async function getFieldValuesWithEmbeddings(
   // corrected URL instead of the original profile value).
   const slots = buildProfileSlots(profile);
   
-  const learnedSlots = learningSystem.getLearnedSlots();
+  // Get high-confidence RL patterns as embedding slots
+  const rlPatterns = await rlSystem.getAllPatterns();
+  const learnedSlots = rlPatterns
+    .filter(p => p.confidence >= 0.6)
+    .map(p => ({ label: p.fieldLabel, value: p.learnedValue }));
   for (const ls of learnedSlots) {
     // Check if an existing profile slot covers this label
     const existingIdx = slots.findIndex(s =>

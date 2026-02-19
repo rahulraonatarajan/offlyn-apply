@@ -5,6 +5,7 @@
 import type { PopupState } from '../shared/types';
 import { getSettings, setSettings, getTodayApplications, generateSummaryMessage } from '../shared/storage';
 import { log, error } from '../shared/log';
+import { getUserProfile, checkProfileCompleteness } from '../shared/profile';
 
 let currentState: PopupState = {
   enabled: true,
@@ -25,15 +26,15 @@ function updateUI(): void {
   const dryrunToggle = document.getElementById('dryrun-toggle');
   if (dryrunToggle) dryrunToggle.classList.toggle('active', currentState.dryRun);
 
-  // Connection status
-  const statusEl = document.getElementById('status');
-  if (statusEl) {
+  // Ollama status
+  const ollamaStatusEl = document.getElementById('ollama-status');
+  if (ollamaStatusEl) {
     if (currentState.nativeHostConnected) {
-      statusEl.textContent = 'Ollama Connected';
-      statusEl.className = 'conn conn-ok';
+      ollamaStatusEl.textContent = 'Connected';
+      ollamaStatusEl.className = 'ollama-status connected';
     } else {
-      statusEl.textContent = 'Ollama Disconnected';
-      statusEl.className = 'conn conn-err';
+      ollamaStatusEl.textContent = 'Disconnected';
+      ollamaStatusEl.className = 'ollama-status disconnected';
     }
   }
 
@@ -42,10 +43,15 @@ function updateUI(): void {
   if (jobInfoEl) {
     if (currentState.lastJob) {
       const title = currentState.lastJob.title || 'Unknown Title';
-      const ats = currentState.lastJob.atsHint ? ` (${currentState.lastJob.atsHint})` : '';
+      const company = currentState.lastJob.hostname || '';
       jobInfoEl.innerHTML = `
-        <div class="job-bar-title">${escapeHtml(title)}${escapeHtml(ats)}</div>
-        <div>${escapeHtml(currentState.lastJob.hostname || '')}</div>
+        <div class="job-bar-detected">
+          <div class="job-dot"></div>
+          <div>
+            <div class="job-bar-label">Job Page Detected</div>
+            <div class="job-bar-detail">${escapeHtml(title)} &middot; ${escapeHtml(company)}</div>
+          </div>
+        </div>
       `;
     } else {
       jobInfoEl.innerHTML = '<div class="job-bar-empty">No job detected yet</div>';
@@ -107,11 +113,51 @@ async function executeOnActiveTab(code: string): Promise<void> {
 
 // ── Init ────────────────────────────────────────────────────────────────────
 
+async function checkProfileStatus(): Promise<void> {
+  try {
+    const profile = await getUserProfile();
+    const warningEl = document.getElementById('profile-warning');
+    if (!warningEl) return;
+
+    if (!profile) {
+      warningEl.style.display = 'block';
+      warningEl.innerHTML = '<strong>No profile found.</strong> <a href="#" id="profile-warning-link" style="color:#ea580c;text-decoration:underline;">Set up your profile</a> to enable auto-fill.';
+      warningEl.querySelector('#profile-warning-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        browser.tabs.create({ url: browser.runtime.getURL('onboarding/onboarding.html') });
+        window.close();
+      });
+      return;
+    }
+
+    const completeness = checkProfileCompleteness(profile);
+    log(`Profile completeness: ${completeness.completionPercentage}% (missing: ${completeness.missingFields.join(', ') || 'none'})`);
+
+    if (completeness.completionPercentage < 70) {
+      const missing = completeness.missingFields.slice(0, 4).join(', ');
+      const moreCount = completeness.missingFields.length - 4;
+      const moreText = moreCount > 0 ? ` +${moreCount} more` : '';
+      warningEl.style.display = 'block';
+      warningEl.innerHTML = `<strong>Profile ${completeness.completionPercentage}% complete.</strong> Missing: ${missing}${moreText}. <a href="#" id="profile-warning-link" style="color:#ea580c;text-decoration:underline;">Complete profile</a>`;
+      warningEl.querySelector('#profile-warning-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        browser.tabs.create({ url: browser.runtime.getURL('onboarding/onboarding.html') });
+        window.close();
+      });
+    } else {
+      warningEl.style.display = 'none';
+    }
+  } catch (err) {
+    error('Failed to check profile status:', err);
+  }
+}
+
 async function init(): Promise<void> {
   const settings = await getSettings();
   currentState.enabled = settings.enabled;
   currentState.dryRun = settings.dryRun;
   requestState();
+  checkProfileStatus();
 
   // ── Manage Profile (single button → onboarding page) ──
   document.getElementById('profile-btn')?.addEventListener('click', () => {
@@ -122,6 +168,24 @@ async function init(): Promise<void> {
   // ── View Dashboard ──
   document.getElementById('view-dashboard-btn')?.addEventListener('click', () => {
     browser.tabs.create({ url: browser.runtime.getURL('dashboard/dashboard.html') });
+    window.close();
+  });
+
+  // ── Footer links ──
+  document.getElementById('home-btn')?.addEventListener('click', () => {
+    browser.tabs.create({ url: browser.runtime.getURL('home/home.html') });
+    window.close();
+  });
+  document.getElementById('settings-btn')?.addEventListener('click', () => {
+    browser.tabs.create({ url: browser.runtime.getURL('settings/settings.html') });
+    window.close();
+  });
+  document.getElementById('help-btn')?.addEventListener('click', () => {
+    browser.tabs.create({ url: browser.runtime.getURL('help/help.html') });
+    window.close();
+  });
+  document.getElementById('privacy-btn')?.addEventListener('click', () => {
+    browser.tabs.create({ url: browser.runtime.getURL('privacy/privacy.html') });
     window.close();
   });
 

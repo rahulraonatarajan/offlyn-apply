@@ -1,5 +1,5 @@
 /**
- * Shared type definitions for the Offlyn Firefox extension
+ * Shared type definitions for the Offlyn Apply extension
  */
 
 export interface JobMeta {

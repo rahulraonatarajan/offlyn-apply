@@ -340,7 +340,7 @@ function injectStyles(): void {
 /* ── Header ── */
 .ocl-header {
   padding: 12px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1e2a3a 0%, #7cb342 100%);
   color: #fff;
   display: flex;
   align-items: center;
@@ -378,13 +378,13 @@ function injectStyles(): void {
 .ocl-generating, .ocl-refining {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 16px; margin-bottom: 16px;
-  background: #f5f3ff; border-radius: 8px;
-  font-size: 13px; color: #6d28d9;
+  background: #f0f7e8; border-radius: 8px;
+  font-size: 13px; color: #1e2a3a;
 }
 .ocl-spinner {
   width: 16px; height: 16px;
-  border: 2px solid #c4b5fd;
-  border-top-color: #6d28d9;
+  border: 2px solid rgba(124, 179, 66, 0.3);
+  border-top-color: #7cb342;
   border-radius: 50%;
   animation: oclSpin .7s linear infinite;
   flex-shrink: 0;
@@ -413,27 +413,27 @@ function injectStyles(): void {
 .ocl-refine-bar {
   padding: 10px 20px;
   border-top: 1px solid #e5e7eb;
-  background: #faf5ff;
+  background: #f5f9f0;
   display: flex; align-items: center; gap: 8px;
   flex-shrink: 0;
 }
 .ocl-refine-label {
-  font-size: 12px; font-weight: 600; color: #6d28d9;
+  font-size: 12px; font-weight: 600; color: #1e2a3a;
   flex-shrink: 0;
 }
 .ocl-refine-btn {
   padding: 5px 12px; border-radius: 6px;
   font-size: 12px; font-weight: 600;
-  cursor: pointer; border: 1px solid #d8b4fe;
-  background: #fff; color: #7c3aed;
+  cursor: pointer; border: 1px solid rgba(124, 179, 66, 0.4);
+  background: #fff; color: #558b2f;
   transition: all .15s; font-family: inherit;
 }
 .ocl-refine-btn:hover {
-  background: #7c3aed; color: #fff; border-color: #7c3aed;
+  background: #558b2f; color: #fff; border-color: #558b2f;
 }
 .ocl-refine-btn:disabled {
   opacity: .5; cursor: default;
-  background: #fff; color: #7c3aed;
+  background: #fff; color: #558b2f;
 }
 
 /* ── Actions ── */
@@ -456,18 +456,18 @@ function injectStyles(): void {
 .ocl-btn:disabled { opacity: .5; cursor: default; }
 
 .ocl-btn-apply {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1e2a3a 0%, #7cb342 100%);
   color: #fff; border: none;
 }
 .ocl-btn-apply:hover {
-  box-shadow: 0 4px 14px rgba(102,126,234,.4);
+  box-shadow: 0 4px 14px rgba(30, 42, 58, 0.3);
   transform: translateY(-1px);
 }
 .ocl-btn-regen {
   margin-left: auto;
-  color: #667eea; border-color: #c7d2fe;
+  color: #1e2a3a; border-color: rgba(124, 179, 66, 0.3);
 }
-.ocl-btn-regen:hover { background: #eef2ff; }
+.ocl-btn-regen:hover { background: #f0f7e8; }
   `;
   document.head.appendChild(s);
 }

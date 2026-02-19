@@ -21,20 +21,20 @@ function shouldLogError(): boolean {
 
 export function log(...args: unknown[]): void {
   if (DEBUG) {
-    console.log('[Offlyn]', ...args);
+    console.log('[OA]', ...args);
   }
 }
 
 export function info(...args: unknown[]): void {
-  console.info('[Offlyn]', ...args);
+  console.info('[OA]', ...args);
 }
 
 export function warn(...args: unknown[]): void {
-  console.warn('[Offlyn]', ...args);
+  console.warn('[OA]', ...args);
 }
 
 export function error(...args: unknown[]): void {
   if (shouldLogError()) {
-    console.error('[Offlyn]', ...args);
+    console.error('[OA]', ...args);
   }
 }

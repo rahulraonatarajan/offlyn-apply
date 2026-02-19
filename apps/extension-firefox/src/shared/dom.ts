@@ -180,7 +180,7 @@ function detectLikelyDropdown(field: HTMLInputElement | HTMLSelectElement | HTML
   ];
   
   if (yesNoPatterns.some(pattern => labelLower.includes(pattern))) {
-    console.log('[Offlyn] Detected Yes/No dropdown:', label);
+    console.log('[OA] Detected Yes/No dropdown:', label);
     return true;
   }
   
@@ -194,7 +194,7 @@ function detectLikelyDropdown(field: HTMLInputElement | HTMLSelectElement | HTML
   if (selfIdPatterns.some(pattern => 
     labelLower.includes(pattern) || idLower.includes(pattern) || nameLower.includes(pattern)
   )) {
-    console.log('[Offlyn] Detected Self-ID dropdown:', label);
+    console.log('[OA] Detected Self-ID dropdown:', label);
     return true;
   }
   
@@ -205,7 +205,7 @@ function detectLikelyDropdown(field: HTMLInputElement | HTMLSelectElement | HTML
   ];
   
   if (workAuthPatterns.some(pattern => labelLower.includes(pattern))) {
-    console.log('[Offlyn] Detected Work Auth dropdown:', label);
+    console.log('[OA] Detected Work Auth dropdown:', label);
     return true;
   }
   
@@ -220,7 +220,7 @@ function detectLikelyDropdown(field: HTMLInputElement | HTMLSelectElement | HTML
   if (educationPatterns.some(pattern => 
     labelLower.includes(pattern) || idLower.includes(pattern) || nameLower.includes(pattern)
   )) {
-    console.log('[Offlyn] Detected Education dropdown:', label);
+    console.log('[OA] Detected Education dropdown:', label);
     return true;
   }
   
@@ -229,20 +229,20 @@ function detectLikelyDropdown(field: HTMLInputElement | HTMLSelectElement | HTML
     labelLower.includes('years') || 
     labelLower.includes('level')
   )) {
-    console.log('[Offlyn] Detected Experience dropdown:', label);
+    console.log('[OA] Detected Experience dropdown:', label);
     return true;
   }
   
   // Pattern 6: Has autocomplete="off" AND is readonly (common for custom dropdowns)
   if (field.autocomplete === 'off' && field.readOnly) {
-    console.log('[Offlyn] Detected readonly autocomplete=off field (likely dropdown):', label);
+    console.log('[OA] Detected readonly autocomplete=off field (likely dropdown):', label);
     return true;
   }
   
   // Pattern 7: Check for dropdown-related attributes
   const role = field.getAttribute('role');
   if (role === 'combobox' || role === 'listbox') {
-    console.log('[Offlyn] Detected ARIA combobox/listbox:', label);
+    console.log('[OA] Detected ARIA combobox/listbox:', label);
     return true;
   }
   
@@ -252,7 +252,7 @@ function detectLikelyDropdown(field: HTMLInputElement | HTMLSelectElement | HTML
       placeholder === 'select...' ||
       placeholder === 'choose' ||
       placeholder.includes('pick one')) {
-    console.log('[Offlyn] Detected dropdown by placeholder:', label, placeholder);
+    console.log('[OA] Detected dropdown by placeholder:', label, placeholder);
     return true;
   }
   
@@ -265,7 +265,7 @@ function detectLikelyDropdown(field: HTMLInputElement | HTMLSelectElement | HTML
         parentHtml.includes('dropdown') ||
         parentHtml.includes('chevron') ||
         parent.querySelector('[class*="arrow"], [class*="chevron"], [class*="caret"]')) {
-      console.log('[Offlyn] Detected dropdown by arrow icon:', label);
+      console.log('[OA] Detected dropdown by arrow icon:', label);
       return true;
     }
   }
@@ -346,9 +346,9 @@ export function extractFormSchema(form: HTMLFormElement | Document): FieldSchema
     '[class*="text-field"]',
   ].join(', ');
   
-  console.log('[Offlyn] Querying with selector:', selector);
+  console.log('[OA] Querying with selector:', selector);
   const formFields = form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(selector);
-  console.log('[Offlyn] Found', formFields.length, 'fields with standard query');
+  console.log('[OA] Found', formFields.length, 'fields with standard query');
   
   // Add fields from standard DOM
   for (const field of formFields) {
@@ -359,7 +359,7 @@ export function extractFormSchema(form: HTMLFormElement | Document): FieldSchema
     let valuePreview: string | null = null;
     if (field instanceof HTMLInputElement && (field.type === 'checkbox' || field.type === 'radio')) {
       valuePreview = field.getAttribute('value') || field.value || null;
-      console.log('[Offlyn] 🔍 Found checkbox/radio:', {
+      console.log('[OA] 🔍 Found checkbox/radio:', {
         type: field.type,
         label,
         value: valuePreview,
@@ -377,7 +377,7 @@ export function extractFormSchema(form: HTMLFormElement | Document): FieldSchema
     if (detectLikelyDropdown(field, label)) {
       actualType = 'autocomplete'; // Mark as autocomplete (searchable dropdown)
       options = getCommonDropdownOptions(label);
-      console.log('[Offlyn] Upgraded field to autocomplete:', label, 'Options:', options?.length || 0);
+      console.log('[OA] Upgraded field to autocomplete:', label, 'Options:', options?.length || 0);
     }
     
     // For actual select elements, extract options
@@ -404,9 +404,9 @@ export function extractFormSchema(form: HTMLFormElement | Document): FieldSchema
   }
   
   // CRITICAL: Traverse Shadow DOM (SmartRecruiters uses this!)
-  console.log('[Offlyn] Scanning for Shadow DOM fields...');
+  console.log('[OA] Scanning for Shadow DOM fields...');
   const shadowFields = traverseShadowDOM(form);
-  console.log('[Offlyn] Found', shadowFields.length, 'fields in Shadow DOM');
+  console.log('[OA] Found', shadowFields.length, 'fields in Shadow DOM');
   fields.push(...shadowFields);
   
   return fields;
@@ -433,13 +433,13 @@ function traverseShadowDOM(root: HTMLFormElement | Document | ShadowRoot): Field
   for (const element of allElements) {
     // Check if this element has a shadow root
     if (element.shadowRoot) {
-      console.log('[Offlyn Shadow] Traversing:', element.tagName);
+      console.log('[OA Shadow] Traversing:', element.tagName);
       
       // Query fields in this shadow root
       const fieldsInShadow = element.shadowRoot.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(selector);
       
       for (const field of fieldsInShadow) {
-        console.log('[Offlyn Shadow] Found field in', element.tagName, ':', field.tagName, field.type);
+        console.log('[OA Shadow] Found field in', element.tagName, ':', field.tagName, field.type);
         
         // Extract label from shadow DOM context
         const label = extractLabelFromShadow(field, element);
@@ -531,17 +531,17 @@ function detectShadowFieldType(field: HTMLInputElement | HTMLSelectElement | HTM
   
   // SmartRecruiters component detection
   if (hostTag === 'spl-autocomplete') {
-    console.log('[Offlyn Shadow] Detected AUTOCOMPLETE (dropdown)');
+    console.log('[OA Shadow] Detected AUTOCOMPLETE (dropdown)');
     return 'autocomplete'; // Dropdown with search
   }
   
   if (hostTag === 'spl-phone-field') {
-    console.log('[Offlyn Shadow] Detected PHONE FIELD');
+    console.log('[OA Shadow] Detected PHONE FIELD');
     return 'tel';
   }
   
   if (hostTag === 'spl-dropzone') {
-    console.log('[Offlyn Shadow] Detected FILE UPLOAD');
+    console.log('[OA Shadow] Detected FILE UPLOAD');
     return 'file';
   }
   
@@ -549,14 +549,14 @@ function detectShadowFieldType(field: HTMLInputElement | HTMLSelectElement | HTM
   if (host.shadowRoot) {
     const hasSelect = host.shadowRoot.querySelector('select');
     if (hasSelect) {
-      console.log('[Offlyn Shadow] Detected SELECT element inside');
+      console.log('[OA Shadow] Detected SELECT element inside');
       return 'select-one';
     }
     
     // Check for role="listbox" or role="combobox" (custom dropdowns)
     const hasListbox = host.shadowRoot.querySelector('[role="listbox"], [role="combobox"]');
     if (hasListbox) {
-      console.log('[Offlyn Shadow] Detected custom dropdown (role-based)');
+      console.log('[OA Shadow] Detected custom dropdown (role-based)');
       return 'select';
     }
   }
@@ -564,7 +564,7 @@ function detectShadowFieldType(field: HTMLInputElement | HTMLSelectElement | HTM
   // Check host attributes
   const role = host.getAttribute('role');
   if (role === 'combobox' || role === 'listbox') {
-    console.log('[Offlyn Shadow] Detected dropdown by host role');
+    console.log('[OA Shadow] Detected dropdown by host role');
     return 'select';
   }
   
@@ -589,7 +589,7 @@ function extractShadowOptions(host: Element): string[] | undefined {
         options.push(text);
       }
     });
-    console.log('[Offlyn Shadow] Extracted', options.length, 'options from <select>');
+    console.log('[OA Shadow] Extracted', options.length, 'options from <select>');
     return options;
   }
   
@@ -602,7 +602,7 @@ function extractShadowOptions(host: Element): string[] | undefined {
         options.push(text);
       }
     });
-    console.log('[Offlyn Shadow] Extracted', options.length, 'options from custom dropdown');
+    console.log('[OA Shadow] Extracted', options.length, 'options from custom dropdown');
     return options;
   }
   
@@ -612,7 +612,7 @@ function extractShadowOptions(host: Element): string[] | undefined {
     try {
       const parsed = JSON.parse(dataOptions);
       if (Array.isArray(parsed)) {
-        console.log('[Offlyn Shadow] Extracted', parsed.length, 'options from host attribute');
+        console.log('[OA Shadow] Extracted', parsed.length, 'options from host attribute');
         return parsed.map(String);
       }
     } catch (e) {
@@ -787,8 +787,8 @@ export function isJobApplicationPage(): boolean {
   const url = window.location.href.toLowerCase();
   const hostname = window.location.hostname.toLowerCase();
   
-  console.log('[Offlyn Detection] Checking URL:', url);
-  console.log('[Offlyn Detection] Hostname:', hostname);
+  console.log('[OA Detection] Checking URL:', url);
+  console.log('[OA Detection] Hostname:', hostname);
   
   // ── Tier 1: Known ATS hostnames (instant match) ───────────────────────
   const knownATSHostnames = [
@@ -814,7 +814,7 @@ export function isJobApplicationPage(): boolean {
   
   for (const ats of knownATSHostnames) {
     if (hostname.includes(ats)) {
-      console.log('[Offlyn Detection] Tier-1 match (ATS hostname):', ats);
+      console.log('[OA Detection] Tier-1 match (ATS hostname):', ats);
       return true;
     }
   }
@@ -837,7 +837,7 @@ export function isJobApplicationPage(): boolean {
   for (const pattern of jobUrlPatterns) {
     if (pattern.test(url)) {
       score += 2;
-      console.log('[Offlyn Detection] +2 URL pattern:', pattern);
+      console.log('[OA Detection] +2 URL pattern:', pattern);
       break;
     }
   }
@@ -851,7 +851,7 @@ export function isJobApplicationPage(): boolean {
     for (const pattern of weakUrlPatterns) {
       if (pattern.test(url)) {
         score += 1;
-        console.log('[Offlyn Detection] +1 weak URL pattern:', pattern);
+        console.log('[OA Detection] +1 weak URL pattern:', pattern);
         break;
       }
     }
@@ -867,7 +867,7 @@ export function isJobApplicationPage(): boolean {
     if (fields.length >= 4) {
       hasSubstantialForm = true;
       score += 2;
-      console.log('[Offlyn Detection] +2 form with', fields.length, 'fields');
+      console.log('[OA Detection] +2 form with', fields.length, 'fields');
       break;
     }
   }
@@ -879,7 +879,7 @@ export function isJobApplicationPage(): boolean {
     );
     if (allFields.length >= 6) {
       score += 1;
-      console.log('[Offlyn Detection] +1 loose fields:', allFields.length);
+      console.log('[OA Detection] +1 loose fields:', allFields.length);
     }
   }
   
@@ -890,7 +890,7 @@ export function isJobApplicationPage(): boolean {
     const text = getVisibleText(btn) || '';
     if (applyPattern.test(text)) {
       score += 1;
-      console.log('[Offlyn Detection] +1 apply button:', text.substring(0, 50));
+      console.log('[OA Detection] +1 apply button:', text.substring(0, 50));
       break;
     }
   }
@@ -909,18 +909,18 @@ export function isJobApplicationPage(): boolean {
   for (const indicator of strongJobIndicators) {
     if (bodyText.includes(indicator)) {
       score += 1;
-      console.log('[Offlyn Detection] +1 content indicator:', indicator);
+      console.log('[OA Detection] +1 content indicator:', indicator);
       break;
     }
   }
   
-  console.log('[Offlyn Detection] Final score:', score, '(need >= 3)');
+  console.log('[OA Detection] Final score:', score, '(need >= 3)');
   
   if (score >= 3) {
-    console.log('[Offlyn Detection] Page IS a job application page');
+    console.log('[OA Detection] Page IS a job application page');
     return true;
   }
   
-  console.log('[Offlyn Detection] Page is NOT a job application page');
+  console.log('[OA Detection] Page is NOT a job application page');
   return false;
 }

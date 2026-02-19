@@ -1,5 +1,6 @@
 /**
  * Notification system - shows toast notifications to user
+ * Brand: navy #1e293b + green #16a34a
  */
 
 type NotificationType = 'success' | 'error' | 'warning' | 'info';
@@ -23,108 +24,88 @@ export function showNotification(
   type: NotificationType = 'info',
   duration: number = 4000
 ): void {
+  ensureStyles();
+
   const id = `notification_${Date.now()}`;
-  
-  // Create notification container if it doesn't exist
+
+  // Create container if it doesn't exist
   let container = document.getElementById('offlyn-notifications-container');
   if (!container) {
     container = document.createElement('div');
     container.id = 'offlyn-notifications-container';
-    container.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 2147483647;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      pointer-events: none;
-    `;
+    Object.assign(container.style, {
+      position: 'fixed',
+      top: '20px',
+      right: '20px',
+      zIndex: '2147483647',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px',
+      pointerEvents: 'none',
+    });
     document.body.appendChild(container);
   }
-  
-  // Create notification element
-  const notification = document.createElement('div');
-  notification.id = id;
-  notification.style.cssText = `
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    padding: 16px;
+
+  const { accent, iconSvg } = getTypeStyle(type);
+
+  const el = document.createElement('div');
+  el.id = id;
+  el.className = 'offlyn-toast offlyn-toast-enter';
+  el.setAttribute('data-type', type);
+  el.style.cssText = `
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(30,41,59,0.14), 0 1px 4px rgba(30,41,59,0.08);
+    padding: 14px 16px;
     min-width: 300px;
-    max-width: 400px;
+    max-width: 380px;
     pointer-events: auto;
-    animation: slideInRight 0.3s ease;
-    border-left: 4px solid ${getTypeColor(type)};
+    border-left: 4px solid ${accent};
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    animation: offlyn-slide-in 0.25s cubic-bezier(0.16,1,0.3,1) forwards;
   `;
-  
-  const icon = getTypeIcon(type);
-  
-  notification.innerHTML = `
-    <div style="display: flex; align-items: start; gap: 12px;">
-      <div style="
-        font-size: 24px;
-        flex-shrink: 0;
-        line-height: 1;
-      ">${icon}</div>
-      <div style="flex: 1; min-width: 0;">
-        <div style="
-          font-weight: 600;
-          font-size: 14px;
-          color: #111827;
-          margin-bottom: 4px;
-        ">${escapeHtml(title)}</div>
-        <div style="
-          font-size: 13px;
-          color: #6b7280;
-          line-height: 1.4;
-        ">${escapeHtml(message)}</div>
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:10px;">
+      <div style="flex-shrink:0;margin-top:1px;">${iconSvg}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:13px;color:#1e293b;line-height:1.3;margin-bottom:3px;">${escapeHtml(title)}</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.4;">${escapeHtml(message)}</div>
       </div>
-      <button style="
-        background: none;
-        border: none;
-        color: #9ca3af;
-        cursor: pointer;
-        font-size: 20px;
-        line-height: 1;
-        padding: 0;
-        width: 20px;
-        height: 20px;
-        flex-shrink: 0;
-      " onclick="this.closest('[id^=notification_]').remove()">×</button>
+      <button
+        style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px;line-height:1;padding:0;width:18px;height:18px;flex-shrink:0;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:background 0.15s,color 0.15s;"
+        onmouseover="this.style.background='#f1f5f9';this.style.color='#334155';"
+        onmouseout="this.style.background='none';this.style.color='#94a3b8';"
+        onclick="document.getElementById('${id}')?.remove()"
+        title="Dismiss"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>
+      </button>
     </div>
   `;
-  
-  container.appendChild(notification);
-  activeNotifications.set(id, notification);
-  
-  // Auto-remove after duration
+
+  container.appendChild(el);
+  activeNotifications.set(id, el);
+
   if (duration > 0) {
-    setTimeout(() => {
-      removeNotification(id);
-    }, duration);
+    setTimeout(() => removeNotification(id), duration);
   }
 }
 
 /**
- * Remove a notification
+ * Remove a notification with slide-out animation
  */
 function removeNotification(id: string): void {
-  const notification = activeNotifications.get(id);
-  if (!notification) return;
-  
-  notification.style.animation = 'slideOutRight 0.3s ease';
-  
+  const el = activeNotifications.get(id);
+  if (!el) return;
+
+  el.style.animation = 'offlyn-slide-out 0.2s ease forwards';
   setTimeout(() => {
-    notification.remove();
+    el.remove();
     activeNotifications.delete(id);
-    
-    // Remove container if empty
     const container = document.getElementById('offlyn-notifications-container');
-    if (container && container.children.length === 0) {
-      container.remove();
-    }
-  }, 300);
+    if (container && container.children.length === 0) container.remove();
+  }, 200);
 }
 
 /**
@@ -137,29 +118,28 @@ export function clearAllNotifications(): void {
 }
 
 /**
- * Get color for notification type
+ * Brand-aligned colors + icons per type
  */
-function getTypeColor(type: NotificationType): string {
-  const colors = {
-    success: '#10b981',
-    error: '#ef4444',
-    warning: '#f59e0b',
-    info: '#3b82f6'
+function getTypeStyle(type: NotificationType): { accent: string; iconSvg: string } {
+  const styles = {
+    success: {
+      accent: '#16a34a',
+      iconSvg: `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#16a34a"/><path d="M5.5 9l2.5 2.5 4.5-4.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    },
+    error: {
+      accent: '#ef4444',
+      iconSvg: `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#ef4444"/><path d="M6 6l6 6M12 6l-6 6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+    },
+    warning: {
+      accent: '#f59e0b',
+      iconSvg: `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1.5l7.5 14H1.5L9 1.5z" fill="#f59e0b"/><path d="M9 7v3.5M9 12.5h.01" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+    },
+    info: {
+      accent: '#1e293b',
+      iconSvg: `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#1e293b"/><path d="M9 8.5v4M9 5.5h.01" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+    },
   };
-  return colors[type];
-}
-
-/**
- * Get icon for notification type
- */
-function getTypeIcon(type: NotificationType): string {
-  const icons = {
-    success: '✅',
-    error: '❌',
-    warning: '⚠️',
-    info: 'ℹ️'
-  };
-  return icons[type];
+  return styles[type];
 }
 
 /**
@@ -172,71 +152,43 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * Add animation styles
+ * Inject keyframe animations once
  */
-function addNotificationStyles(): void {
+function ensureStyles(): void {
   if (document.getElementById('offlyn-notification-styles')) return;
-  
+
   const style = document.createElement('style');
   style.id = 'offlyn-notification-styles';
   style.textContent = `
-    @keyframes slideInRight {
-      from {
-        opacity: 0;
-        transform: translateX(100px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
+    @keyframes offlyn-slide-in {
+      from { opacity: 0; transform: translateX(24px); }
+      to   { opacity: 1; transform: translateX(0); }
     }
-    
-    @keyframes slideOutRight {
-      from {
-        opacity: 1;
-        transform: translateX(0);
-      }
-      to {
-        opacity: 0;
-        transform: translateX(100px);
-      }
+    @keyframes offlyn-slide-out {
+      from { opacity: 1; transform: translateX(0); }
+      to   { opacity: 0; transform: translateX(24px); }
     }
   `;
-  
   document.head.appendChild(style);
 }
 
-// Initialize styles
+// Initialise styles on load
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', addNotificationStyles);
+  document.addEventListener('DOMContentLoaded', ensureStyles);
 } else {
-  addNotificationStyles();
+  ensureStyles();
 }
 
-/**
- * Show success notification
- */
+/** Convenience helpers */
 export function showSuccess(title: string, message: string, duration?: number): void {
   showNotification(title, message, 'success', duration);
 }
-
-/**
- * Show error notification
- */
 export function showError(title: string, message: string, duration?: number): void {
   showNotification(title, message, 'error', duration);
 }
-
-/**
- * Show warning notification
- */
 export function showWarning(title: string, message: string, duration?: number): void {
   showNotification(title, message, 'warning', duration);
 }
-
-/**
- * Show info notification
- */
 export function showInfo(title: string, message: string, duration?: number): void {
   showNotification(title, message, 'info', duration);
 }

@@ -55,6 +55,7 @@ const pathMap = {
   'src/popup/popup.ts': 'dist/popup/popup.js',
   'src/onboarding/onboarding.ts': 'dist/onboarding/onboarding.js',
   'src/dashboard/dashboard.ts': 'dist/dashboard/dashboard.js',
+  'src/settings/settings.ts': 'dist/settings/settings.js',
 };
 
 async function build() {

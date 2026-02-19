@@ -60,3 +60,4 @@ mastra/
 
 # Daily tracking dashboard (local only, not committed to git)
 .dashboard/
+/UImockupfiles

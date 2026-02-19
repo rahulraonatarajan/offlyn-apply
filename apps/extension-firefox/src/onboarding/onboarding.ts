@@ -2,8 +2,11 @@
  * Onboarding page logic
  */
 
-import type { UserProfile } from '../shared/profile';
-import { saveUserProfile } from '../shared/profile';
+import type { UserProfile, PhoneDetails, LocationDetails, SelfIdentification } from '../shared/profile';
+import { saveUserProfile, isPhoneDetails, isLocationDetails, formatPhone, formatLocation } from '../shared/profile';
+import { rlSystem } from '../shared/learning-rl';
+import type { LearnedPattern } from '../shared/learning-types';
+import { getOllamaConfig, saveOllamaConfig, testOllamaConnection, DEFAULT_OLLAMA_CONFIG } from '../shared/ollama-config';
 
 // PDF.js is loaded via CDN in the HTML
 declare const pdfjsLib: any;
@@ -15,6 +18,8 @@ let isConnected = false;
 /**
  * Show a specific step
  */
+const STEP_ORDER = ['step-upload', 'step-ollama', 'step-review', 'step-links', 'step-selfid', 'step-workauth', 'step-coverletter', 'step-success'];
+
 function showStep(stepId: string): void {
   document.querySelectorAll('.step').forEach(step => {
     step.classList.remove('active');
@@ -23,6 +28,27 @@ function showStep(stepId: string): void {
   if (targetStep) {
     targetStep.classList.add('active');
   }
+  updateWizard(stepId);
+}
+
+function updateWizard(activeStepId: string): void {
+  const stepIndex = STEP_ORDER.indexOf(activeStepId);
+  if (stepIndex < 0) return;
+
+  const indicator = document.getElementById('stepIndicator');
+  if (indicator) {
+    indicator.textContent = `Step ${stepIndex + 1} of ${STEP_ORDER.length}`;
+  }
+
+  const wizardSteps = document.querySelectorAll('.wizard-step');
+  wizardSteps.forEach((el, i) => {
+    el.classList.remove('active', 'completed');
+    if (i < stepIndex) {
+      el.classList.add('completed');
+    } else if (i === stepIndex) {
+      el.classList.add('active');
+    }
+  });
 }
 
 /**
@@ -83,36 +109,61 @@ function hideProgress(): void {
 function showErrorDetails(error: string, details?: any): void {
   const errorDetailsEl = document.getElementById('errorDetails');
   if (!errorDetailsEl) return;
-  
+
+  const isCorsError = /403|Forbidden|CORS|blocking/i.test(error);
+  const isOfflineError = /not connected|ollama not connected|failed to fetch|network/i.test(error) && !isCorsError;
+
   let html = '<div class="error-details">';
-  html += '<h4>Error Details</h4>';
-  html += `<p><strong>Error:</strong> ${error}</p>`;
-  
-  if (!isConnected) {
-    html += '<p><strong>Issue:</strong> Native host is not connected</p>';
-    html += '<p><strong>Solution:</strong></p>';
-    html += '<ul>';
-    html += '<li>Install the native host: <pre>cd native-host && node install-manifest.js</pre></li>';
-    html += '<li>Restart Firefox after installation</li>';
-    html += '<li>Reload this extension from <code>about:debugging</code></li>';
-    html += '</ul>';
+  html += '<h4>Parsing Failed</h4>';
+  html += `<p><strong>Error:</strong> ${escapeHtml(error)}</p>`;
+
+  if (isCorsError) {
+    html += `
+      <p><strong>Cause:</strong> Ollama is running but blocking this extension's requests (CORS).</p>
+      <p><strong>Fix — run this as one complete command, keep the terminal open:</strong></p>
+      <pre style="background:#1e2a3a;color:#a3e635;padding:10px 12px;border-radius:6px;font-size:12px;margin:8px 0;white-space:pre-wrap;word-break:break-all;">OLLAMA_ORIGINS='moz-extension://*' ollama serve</pre>
+      <p style="font-size:12px;color:#e65100;margin-bottom:10px;">
+        ⚠️ Stop the currently running Ollama first (Ctrl+C or quit the menu-bar app),
+        then run the command above and keep that terminal open.
+      </p>
+      <p><strong>Permanent fix</strong> (so you never need to do this again):</p>
+      <pre style="background:#1e2a3a;color:#a3e635;padding:10px 12px;border-radius:6px;font-size:12px;margin:8px 0;white-space:pre-wrap;word-break:break-all;">echo 'export OLLAMA_ORIGINS="moz-extension://*"' >> ~/.zshrc &amp;&amp; source ~/.zshrc</pre>
+      <p style="font-size:12px;color:#666;">After that, plain <code>ollama serve</code> will always allow this extension.</p>
+      <p style="margin-top:10px;"><strong>Then:</strong> Click <em>Next</em> again to retry parsing, or go back to the AI Setup step to re-test the connection.</p>
+    `;
+  } else if (isOfflineError) {
+    html += `
+      <p><strong>Cause:</strong> Cannot reach Ollama. Make sure it is installed and running.</p>
+      <p><strong>Fix:</strong></p>
+      <ul>
+        <li>Start Ollama: <pre style="display:inline;background:#f1f5f9;padding:2px 6px;border-radius:3px;font-size:12px;">ollama serve</pre></li>
+        <li>Or open the Ollama app from your Applications folder</li>
+        <li>Then click <em>Next</em> again to retry</li>
+      </ul>
+      <p style="margin-top:8px;font-size:12px;color:#666;">
+        Don't have Ollama? <a href="https://ollama.com/download" target="_blank" style="color:#558b2f;">Download it here</a> — it's free and runs 100% locally.
+      </p>
+    `;
   } else {
-    html += '<p><strong>Debugging Steps:</strong></p>';
-    html += '<ul>';
-    html += '<li>Open browser console (F12) and check for errors</li>';
-    html += '<li>Check native host logs: <pre>tail -f native-host/native-host.log</pre></li>';
-    html += '<li>Verify Ollama is running: <pre>ollama ps</pre></li>';
-    html += '<li>Test Ollama directly: <pre>curl http://localhost:11434/v1/chat/completions ...</pre></li>';
-    html += '</ul>';
+    html += `
+      <p><strong>Troubleshooting steps:</strong></p>
+      <ul>
+        <li>Verify Ollama is running: <pre style="display:inline;background:#f1f5f9;padding:2px 6px;border-radius:3px;font-size:12px;">ollama ps</pre></li>
+        <li>Verify the model is downloaded: <pre style="display:inline;background:#f1f5f9;padding:2px 6px;border-radius:3px;font-size:12px;">ollama list</pre></li>
+        <li>If you see "403 / Forbidden", restart Ollama with:
+          <pre style="background:#1e2a3a;color:#a3e635;padding:8px 10px;border-radius:5px;font-size:12px;margin:6px 0;">OLLAMA_ORIGINS='moz-extension://*' ollama serve</pre>
+        </li>
+        <li>Test Ollama directly: <pre style="display:inline;background:#f1f5f9;padding:2px 6px;border-radius:3px;font-size:12px;">curl http://localhost:11434/api/version</pre></li>
+      </ul>
+    `;
   }
-  
+
   if (details) {
-    html += '<p><strong>Technical Details:</strong></p>';
-    html += `<pre>${JSON.stringify(details, null, 2)}</pre>`;
+    html += `<details style="margin-top:12px;"><summary style="cursor:pointer;font-size:12px;color:#94a3b8;">Technical details</summary><pre style="font-size:11px;margin-top:8px;overflow-x:auto;">${escapeHtml(JSON.stringify(details, null, 2))}</pre></details>`;
   }
-  
+
   html += '</div>';
-  
+
   errorDetailsEl.innerHTML = html;
 }
 
@@ -133,13 +184,13 @@ function updateConnectionStatus(connected: boolean): void {
   isConnected = connected;
   const statusEl = document.getElementById('connectionStatus');
   if (!statusEl) return;
-  
+
   if (connected) {
     statusEl.className = 'connection-status connected';
-    statusEl.innerHTML = '<span class="status-indicator connected"></span><span>Native Host Connected</span>';
+    statusEl.innerHTML = '<span class="status-indicator connected"></span><span>Ollama Connected — AI parsing ready</span>';
   } else {
     statusEl.className = 'connection-status disconnected';
-    statusEl.innerHTML = '<span class="status-indicator disconnected"></span><span>Native Host Not Connected - Install required</span>';
+    statusEl.innerHTML = '<span class="status-indicator disconnected"></span><span>Ollama not detected — AI parsing unavailable (you can still fill info manually)</span>';
   }
 }
 
@@ -164,6 +215,202 @@ function hideStatus(): void {
   if (statusEl) {
     statusEl.classList.remove('visible');
   }
+}
+
+// ── Ollama Setup Step ──────────────────────────────────────────────────────
+
+type OllamaUIState = 'checking' | 'connected' | 'not-installed';
+
+function showOllamaUIState(state: OllamaUIState): void {
+  (['checking', 'connected', 'not-installed'] as OllamaUIState[]).forEach(s => {
+    const id = s === 'not-installed' ? 'ollamaNotInstalled' : s === 'checking' ? 'ollamaChecking' : 'ollamaConnected';
+    document.getElementById(id)?.classList.toggle('active', s === state);
+  });
+
+  // Show/hide action buttons depending on state
+  const continueBtn = document.getElementById('continueWithOllamaBtn') as HTMLButtonElement | null;
+  const skipBtn = document.getElementById('skipOllamaBtn') as HTMLButtonElement | null;
+
+  if (continueBtn) continueBtn.style.display = state === 'connected' ? '' : 'none';
+  if (skipBtn) skipBtn.style.display = state !== 'checking' ? '' : 'none';
+}
+
+async function checkOllamaConnection(): Promise<void> {
+  showOllamaUIState('checking');
+  console.log('[Ollama Setup] Checking connection...');
+
+  const config = await getOllamaConfig();
+  const result = await testOllamaConnection(config.endpoint);
+
+  if (result.success) {
+    console.log('[Ollama Setup] Connected, version:', result.version, 'corsBlocked:', result.corsBlocked);
+
+    // Update UI labels
+    const versionEl = document.getElementById('ollamaVersion');
+    const endpointEl = document.getElementById('ollamaEndpoint');
+    const modelEl = document.getElementById('ollamaModel');
+    if (versionEl) versionEl.textContent = `v${result.version}`;
+    if (endpointEl) endpointEl.textContent = config.endpoint;
+    if (modelEl) modelEl.textContent = config.chatModel;
+
+    // Pre-fill advanced config inputs
+    const epInput = document.getElementById('customOllamaEndpoint') as HTMLInputElement | null;
+    const chatInput = document.getElementById('customChatModel') as HTMLInputElement | null;
+    const embInput = document.getElementById('customEmbeddingModel') as HTMLInputElement | null;
+    if (epInput) epInput.value = config.endpoint;
+    if (chatInput) chatInput.value = config.chatModel;
+    if (embInput) embInput.value = config.embeddingModel;
+
+    showOllamaUIState('connected');
+
+    // If CORS is blocked, show warning and disable Continue (only Skip available)
+    const corsWarning = document.getElementById('ollamaCorsWarning');
+    const connectedCard = document.getElementById('ollamaConnectedCard');
+    const continueBtn = document.getElementById('continueWithOllamaBtn') as HTMLButtonElement | null;
+
+    if (result.corsBlocked) {
+      corsWarning?.classList.add('visible');
+      // Turn the success card amber to signal "reachable but not usable"
+      if (connectedCard) {
+        connectedCard.style.background = '#fffbeb';
+        connectedCard.style.borderColor = '#fde68a';
+        const icon = connectedCard.querySelector('svg');
+        if (icon) (icon as SVGElement).style.color = '#d97706';
+        const heading = connectedCard.querySelector('h3');
+        if (heading) { heading.textContent = 'Ollama Reachable — CORS Blocked'; heading.style.color = '#92400e'; }
+      }
+      // Block the Continue button so user can't proceed with broken AI
+      if (continueBtn) {
+        continueBtn.disabled = true;
+        continueBtn.title = 'Fix the CORS issue first, then Re-test Connection';
+      }
+    } else {
+      // Clean / green state — make sure warning is hidden, card is green
+      corsWarning?.classList.remove('visible');
+      if (connectedCard) {
+        connectedCard.style.background = '';
+        connectedCard.style.borderColor = '';
+        const icon = connectedCard.querySelector('svg');
+        if (icon) (icon as SVGElement).style.color = '';
+        const heading = connectedCard.querySelector('h3');
+        if (heading) { heading.textContent = 'Ollama Connected'; heading.style.color = ''; }
+      }
+      if (continueBtn) {
+        continueBtn.disabled = false;
+        continueBtn.title = '';
+      }
+    }
+  } else {
+    console.warn('[Ollama Setup] Connection failed:', result.error);
+    showOllamaUIState('not-installed');
+  }
+}
+
+function setupOllamaStepListeners(): void {
+  // Back button
+  document.getElementById('backFromOllamaBtn')?.addEventListener('click', () => {
+    showStep('step-upload');
+  });
+
+  // Continue with AI Features
+  document.getElementById('continueWithOllamaBtn')?.addEventListener('click', async () => {
+    const epInput = (document.getElementById('customOllamaEndpoint') as HTMLInputElement | null)?.value.trim() || DEFAULT_OLLAMA_CONFIG.endpoint;
+    const chatModel = (document.getElementById('customChatModel') as HTMLInputElement | null)?.value.trim() || DEFAULT_OLLAMA_CONFIG.chatModel;
+    const embModel = (document.getElementById('customEmbeddingModel') as HTMLInputElement | null)?.value.trim() || DEFAULT_OLLAMA_CONFIG.embeddingModel;
+
+    const config = await getOllamaConfig();
+    config.enabled = true;
+    config.endpoint = epInput;
+    config.chatModel = chatModel;
+    config.embeddingModel = embModel;
+    config.lastChecked = Date.now();
+    await saveOllamaConfig(config);
+    console.log('[Ollama Setup] AI features enabled, config saved');
+    showStep('step-review');
+  });
+
+  // Skip AI Features
+  const doSkip = async () => {
+    const config = await getOllamaConfig();
+    config.enabled = false;
+    await saveOllamaConfig(config);
+    console.log('[Ollama Setup] AI features skipped');
+    showStep('step-review');
+  };
+
+  document.getElementById('skipOllamaBtn')?.addEventListener('click', doSkip);
+
+  // Retry button (not-installed state)
+  document.getElementById('retryOllamaBtn')?.addEventListener('click', () => {
+    checkOllamaConnection();
+  });
+
+  // Re-test button inside CORS warning banner
+  document.getElementById('retestAfterCorsBtn')?.addEventListener('click', () => {
+    checkOllamaConnection();
+  });
+
+  // Test custom endpoint
+  document.getElementById('testCustomEndpointBtn')?.addEventListener('click', async () => {
+    const epInput = (document.getElementById('customOllamaEndpoint') as HTMLInputElement | null)?.value.trim();
+    const resultEl = document.getElementById('advTestResult');
+    if (!epInput || !resultEl) return;
+
+    resultEl.textContent = 'Testing...';
+    resultEl.className = 'adv-test-result visible';
+
+    const result = await testOllamaConnection(epInput);
+    if (result.success) {
+      resultEl.textContent = `Connected! Ollama v${result.version}`;
+      resultEl.className = 'adv-test-result visible ok';
+    } else {
+      resultEl.textContent = `Failed: ${result.error}`;
+      resultEl.className = 'adv-test-result visible fail';
+    }
+  });
+
+  // Reset to defaults
+  document.getElementById('resetOllamaDefaultsBtn')?.addEventListener('click', () => {
+    const epInput = document.getElementById('customOllamaEndpoint') as HTMLInputElement | null;
+    const chatInput = document.getElementById('customChatModel') as HTMLInputElement | null;
+    const embInput = document.getElementById('customEmbeddingModel') as HTMLInputElement | null;
+    if (epInput) epInput.value = DEFAULT_OLLAMA_CONFIG.endpoint;
+    if (chatInput) chatInput.value = DEFAULT_OLLAMA_CONFIG.chatModel;
+    if (embInput) embInput.value = DEFAULT_OLLAMA_CONFIG.embeddingModel;
+    const resultEl = document.getElementById('advTestResult');
+    if (resultEl) { resultEl.className = 'adv-test-result'; resultEl.textContent = ''; }
+  });
+
+  // Show troubleshooting modal
+  document.getElementById('showTroubleshootingBtn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('troubleshootModal')?.classList.add('visible');
+  });
+
+  // Close troubleshooting modal
+  const closeModal = () => document.getElementById('troubleshootModal')?.classList.remove('visible');
+  document.getElementById('closeTroubleshootingBtn')?.addEventListener('click', closeModal);
+  document.getElementById('tsOverlay')?.addEventListener('click', closeModal);
+
+  // Skip from troubleshooting modal
+  document.getElementById('skipFromTroubleshootingBtn')?.addEventListener('click', async () => {
+    closeModal();
+    await doSkip();
+  });
+
+  // Copy buttons (command snippets)
+  document.querySelectorAll<HTMLButtonElement>('.btn-copy-cmd').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = btn.getAttribute('data-copy') || btn.previousElementSibling?.textContent || '';
+      if (text) {
+        navigator.clipboard.writeText(text.trim()).then(() => {
+          const orig = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = orig; }, 1500);
+        }).catch(() => { /* ignore clipboard errors */ });
+      }
+    });
+  });
 }
 
 /**
@@ -367,30 +614,63 @@ function buildField(
   return inputHtml;
 }
 
+/**
+ * Populate the static personal info form fields (Step 2) from a profile.
+ * Handles both old string format and new PhoneDetails / LocationDetails objects.
+ */
+function populatePersonalInfoForm(profile: UserProfile): void {
+  const setValue = (id: string, value: string) => {
+    const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    if (el) el.value = value;
+  };
+
+  setValue('piFirstName', profile.personal.firstName || '');
+  setValue('piLastName', profile.personal.lastName || '');
+  setValue('piEmail', profile.personal.email || '');
+
+  // Phone
+  const phone = profile.personal.phone;
+  if (isPhoneDetails(phone)) {
+    // Normalise country code: "+1-CA" stored as "+1" with Canada flag — just use "+1"
+    const codeValue = phone.countryCode === '+1-CA' ? '+1-CA' : phone.countryCode;
+    setValue('piPhoneCountryCode', codeValue);
+    setValue('piPhoneNumber', phone.number || '');
+  } else if (typeof phone === 'string' && phone) {
+    // Legacy string: try to parse out country code
+    const match = phone.match(/^(\+\d{1,3})\s*(.*)$/);
+    if (match) {
+      setValue('piPhoneCountryCode', match[1]);
+      // Strip non-digits from the remainder
+      setValue('piPhoneNumber', match[2].replace(/\D/g, ''));
+    } else {
+      setValue('piPhoneNumber', phone.replace(/\D/g, ''));
+    }
+  }
+
+  // Location
+  const location = profile.personal.location;
+  if (isLocationDetails(location)) {
+    setValue('piCity', location.city || '');
+    setValue('piState', location.state || '');
+    setValue('piCountry', location.country || 'United States');
+    setValue('piZipCode', location.zipCode || '');
+  } else if (typeof location === 'string' && location) {
+    // Legacy string: "City, State" or "City, State, Country"
+    const parts = location.split(',').map(p => p.trim());
+    setValue('piCity', parts[0] || '');
+    setValue('piState', parts[1] || '');
+    if (parts[2]) setValue('piCountry', parts[2]);
+  }
+}
+
 function renderProfilePreview(profile: UserProfile): void {
+  // Populate the static personal info form
+  populatePersonalInfoForm(profile);
+
   const preview = document.getElementById('profilePreview');
   if (!preview) return;
   
   let html = '<form id="profileForm">';
-  
-  // Personal info
-  html += '<div class="profile-section">';
-  html += '<h3>Personal Information</h3>';
-  html += `<div class="profile-field"><label class="profile-label">First Name: <span class="required">*</span></label>${buildField('input', 'firstName', profile.personal.firstName || '', ' type="text" required')}</div>`;
-  html += `<div class="profile-field"><label class="profile-label">Last Name: <span class="required">*</span></label>${buildField('input', 'lastName', profile.personal.lastName || '', ' type="text" required')}</div>`;
-  html += `<div class="profile-field"><label class="profile-label">Email: <span class="required">*</span></label>${buildField('input', 'email', profile.personal.email || '', ' type="email" required')}</div>`;
-  html += `<div class="profile-field"><label class="profile-label">Phone:</label>${buildField('input', 'phone', profile.personal.phone || '', ' type="tel"')}</div>`;
-  html += `<div class="profile-field"><label class="profile-label">Location:</label>${buildField('input', 'location', profile.personal.location || '', ' type="text"')}</div>`;
-  html += '</div>';
-  
-  // Professional links
-  html += '<div class="profile-section">';
-  html += '<h3>Professional Links</h3>';
-  html += `<div class="profile-field"><label class="profile-label">LinkedIn:</label>${buildField('input', 'linkedin', profile.professional.linkedin || '', ' type="url"', 'https://linkedin.com/in/...')}</div>`;
-  html += `<div class="profile-field"><label class="profile-label">GitHub:</label>${buildField('input', 'github', profile.professional.github || '', ' type="url"', 'https://github.com/...')}</div>`;
-  html += `<div class="profile-field"><label class="profile-label">Portfolio:</label>${buildField('input', 'portfolio', profile.professional.portfolio || '', ' type="url"', 'https://...')}</div>`;
-  html += `<div class="profile-field"><label class="profile-label">Years of Exp:</label>${buildField('input', 'yearsOfExperience', String(profile.professional.yearsOfExperience || 0), ' type="number" min="0"')}</div>`;
-  html += '</div>';
   
   // Skills (editable list)
   html += '<div class="profile-section">';
@@ -717,6 +997,56 @@ async function saveSelfIdAndContinue(includeSelfId: boolean): Promise<void> {
 }
 
 /**
+ * Pre-fill the Links form from profile data
+ */
+function prefillLinksForm(profile: UserProfile): void {
+  const linkedin = document.getElementById('linksLinkedin') as HTMLInputElement;
+  const portfolio = document.getElementById('linksPortfolio') as HTMLInputElement;
+  const github = document.getElementById('linksGithub') as HTMLInputElement;
+  
+  if (linkedin && profile.professional?.linkedin) linkedin.value = profile.professional.linkedin;
+  if (portfolio && profile.professional?.portfolio) portfolio.value = profile.professional.portfolio;
+  if (github && profile.professional?.github) github.value = profile.professional.github;
+}
+
+/**
+ * Collect links data from form and save to extractedProfile
+ */
+function collectLinksFromForm(): void {
+  if (!extractedProfile) return;
+  
+  const linkedin = (document.getElementById('linksLinkedin') as HTMLInputElement)?.value || '';
+  const portfolio = (document.getElementById('linksPortfolio') as HTMLInputElement)?.value || '';
+  const github = (document.getElementById('linksGithub') as HTMLInputElement)?.value || '';
+  
+  if (!extractedProfile.professional) {
+    extractedProfile.professional = { linkedin: '', github: '', portfolio: '' };
+  }
+  extractedProfile.professional.linkedin = linkedin;
+  extractedProfile.professional.portfolio = portfolio;
+  extractedProfile.professional.github = github;
+}
+
+/**
+ * Collect cover letter defaults from form and save to extractedProfile
+ */
+function collectCoverLetterFromForm(): void {
+  if (!extractedProfile) return;
+  
+  const tone = (document.getElementById('clTone') as HTMLSelectElement)?.value || 'Professional';
+  const keySkillsRaw = (document.getElementById('clKeySkills') as HTMLInputElement)?.value || '';
+  const notes = (document.getElementById('clNotes') as HTMLTextAreaElement)?.value || '';
+  
+  const keySkills = keySkillsRaw.split(',').map(s => s.trim()).filter(Boolean);
+  
+  (extractedProfile as any).coverLetterDefaults = {
+    tone,
+    keySkills,
+    additionalNotes: notes,
+  };
+}
+
+/**
  * Save final profile with all data
  */
 async function saveFinalProfile(includeWorkAuth: boolean): Promise<void> {
@@ -777,51 +1107,23 @@ async function saveFinalProfile(includeWorkAuth: boolean): Promise<void> {
       return;
     }
     
-    // Save resume file for auto-upload (using base64 for efficient storage)
+    // Save resume file for auto-upload using chunked storage (handles large files > 400KB)
     if (uploadedFile) {
       try {
-        const arrayBuffer = await uploadedFile.arrayBuffer();
-        
-        // Convert to base64 instead of number array (3x more storage efficient)
-        const uint8Array = new Uint8Array(arrayBuffer);
-        let binary = '';
-        const chunkSize = 8192;
-        for (let i = 0; i < uint8Array.length; i += chunkSize) {
-          const chunk = uint8Array.subarray(i, i + chunkSize);
-          binary += String.fromCharCode(...chunk);
+        const MAX_RESUME_SIZE = 5 * 1024 * 1024; // 5MB hard limit
+        if (uploadedFile.size > MAX_RESUME_SIZE) {
+          console.warn(`[Resume] File too large (${(uploadedFile.size / 1024 / 1024).toFixed(1)}MB). Maximum 5MB.`);
+          // Still continue — profile was saved, resume just won't auto-attach
+        } else {
+          await saveResumeWithChunking(uploadedFile);
         }
-        const base64Data = btoa(binary);
-        
-        const resumeData = {
-          name: uploadedFile.name,
-          type: uploadedFile.type,
-          size: uploadedFile.size,
-          dataBase64: base64Data,
-          data: null as number[] | null,
-          lastUpdated: Date.now(),
-        };
-        
-        // Save the full file data
-        await browser.storage.local.set({ resumeFile: resumeData });
-        
-        // Also save metadata separately
-        await browser.storage.local.set({
-          resumeFileMeta: {
-            name: uploadedFile.name,
-            type: uploadedFile.type,
-            size: uploadedFile.size,
-            lastUpdated: Date.now(),
-          }
-        });
-        
-        console.log('Resume file saved for auto-upload:', uploadedFile.name, `(${uploadedFile.size} bytes, base64: ${base64Data.length} chars)`);
       } catch (err) {
         console.warn('Failed to save resume file binary:', err);
         // Profile was saved, just the file auto-upload won't work
-        // This is OK - the user can still use the extension, they just need to manually attach resume
       }
     }
     
+    populateReviewSummary();
     showStep('step-success');
   } catch (err) {
     console.error('[Onboarding] saveFinalProfile error:', err);
@@ -829,18 +1131,107 @@ async function saveFinalProfile(includeWorkAuth: boolean): Promise<void> {
   }
 }
 
+function populateReviewSummary(): void {
+  const container = document.getElementById('reviewSummary');
+  if (!container || !extractedProfile) return;
+
+  const p = extractedProfile;
+  let html = '';
+
+  const fullName = [p.personal.firstName, p.personal.lastName].filter(Boolean).join(' ');
+  const phoneDisplay    = formatPhone(p.personal.phone);
+  const locationDisplay = formatLocation(p.personal.location);
+  html += '<div class="review-section">';
+  html += '<div class="review-section-title">Personal Information</div>';
+  if (fullName)        html += `<div class="review-field"><strong>Name:</strong> ${fullName}</div>`;
+  if (p.personal.email) html += `<div class="review-field"><strong>Email:</strong> ${p.personal.email}</div>`;
+  if (phoneDisplay)    html += `<div class="review-field"><strong>Phone:</strong> ${phoneDisplay}</div>`;
+  if (locationDisplay) html += `<div class="review-field"><strong>Location:</strong> ${locationDisplay}</div>`;
+  html += '</div>';
+
+  const hasLinks = p.professional?.linkedin || p.professional?.portfolio || p.professional?.github;
+  if (hasLinks) {
+    html += '<div class="review-section">';
+    html += '<div class="review-section-title">Links</div>';
+    if (p.professional?.linkedin) html += `<div class="review-field"><strong>LinkedIn:</strong> ${p.professional.linkedin}</div>`;
+    if (p.professional?.portfolio) html += `<div class="review-field"><strong>Portfolio:</strong> ${p.professional.portfolio}</div>`;
+    if (p.professional?.github) html += `<div class="review-field"><strong>GitHub:</strong> ${p.professional.github}</div>`;
+    html += '</div>';
+  }
+
+  if (p.workAuth) {
+    html += '<div class="review-section">';
+    html += '<div class="review-section-title">Work Authorization</div>';
+    if (p.workAuth.currentStatus) html += `<div class="review-field"><strong>Status:</strong> ${p.workAuth.currentStatus}</div>`;
+    html += `<div class="review-field"><strong>Sponsorship:</strong> ${p.workAuth.requiresSponsorship ? 'Required' : 'Not required'}</div>`;
+    html += '</div>';
+  }
+
+  if (p.skills?.length) {
+    html += '<div class="review-section">';
+    html += '<div class="review-section-title">Skills</div>';
+    html += `<div class="review-field">${p.skills.join(', ')}</div>`;
+    html += '</div>';
+  }
+
+  const clDefaults = (p as any).coverLetterDefaults;
+  if (clDefaults) {
+    html += '<div class="review-section">';
+    html += '<div class="review-section-title">Cover Letter Preferences</div>';
+    if (clDefaults.tone) html += `<div class="review-field"><strong>Tone:</strong> ${clDefaults.tone}</div>`;
+    if (clDefaults.keySkills?.length) html += `<div class="review-field"><strong>Key Skills:</strong> ${clDefaults.keySkills.join(', ')}</div>`;
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+/**
+ * Collect personal info from the static split-field form (Step 2).
+ */
+function collectPersonalInfoFromForm(): UserProfile['personal'] | null {
+  const getVal = (id: string): string => {
+    const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    return el ? el.value.trim() : '';
+  };
+
+  const firstName = getVal('piFirstName');
+  const lastName  = getVal('piLastName');
+  const email     = getVal('piEmail');
+
+  if (!firstName || !lastName || !email) return null;
+
+  // Build PhoneDetails
+  let rawCode = getVal('piPhoneCountryCode');
+  // "+1-CA" is stored in the dropdown as "+1-CA" but the actual code is "+1"
+  if (rawCode === '+1-CA') rawCode = '+1';
+  const phoneNumber = getVal('piPhoneNumber').replace(/\D/g, '');
+  const phone: PhoneDetails = {
+    countryCode: rawCode || '+1',
+    number: phoneNumber,
+    formatted: rawCode && phoneNumber ? `${rawCode} ${phoneNumber}` : '',
+  };
+
+  // Build LocationDetails
+  const location: LocationDetails = {
+    city:    getVal('piCity'),
+    state:   getVal('piState'),
+    country: getVal('piCountry') || 'United States',
+    zipCode: getVal('piZipCode') || undefined,
+  };
+
+  return { firstName, lastName, email, phone, location };
+}
+
 /**
  * Collect edited profile data from form
  * Preserves work, education, selfId, and workAuth from existing profile
  */
 function collectProfileFromForm(): UserProfile | null {
-  const form = document.getElementById('profileForm') as HTMLFormElement;
-  if (!form) return null;
-  
-  // Get form data
-  const formData = new FormData(form);
-  
-  // Collect skills from skill inputs
+  const personal = collectPersonalInfoFromForm();
+  if (!personal) return null;
+
+  // Collect skills from the dynamic skill list
   const skillsList = document.getElementById('skillsList');
   const skills: string[] = [];
   if (skillsList) {
@@ -849,39 +1240,36 @@ function collectProfileFromForm(): UserProfile | null {
       if (value) skills.push(value);
     });
   }
-  
+
+  // Collect summary from profileForm if present
+  const summaryEl = document.querySelector<HTMLTextAreaElement>('#profileForm textarea[name="summary"]');
+  const summary = summaryEl ? summaryEl.value.trim() : (extractedProfile?.summary || '');
+
   const profile: UserProfile = {
-    personal: {
-      firstName: (formData.get('firstName') as string) || '',
-      lastName: (formData.get('lastName') as string) || '',
-      email: (formData.get('email') as string) || '',
-      phone: (formData.get('phone') as string) || '',
-      location: (formData.get('location') as string) || '',
-    },
+    personal,
     professional: {
-      linkedin: (formData.get('linkedin') as string) || '',
-      github: (formData.get('github') as string) || '',
-      portfolio: (formData.get('portfolio') as string) || '',
-      yearsOfExperience: parseInt((formData.get('yearsOfExperience') as string) || '0', 10),
+      linkedin: extractedProfile?.professional?.linkedin || '',
+      github: extractedProfile?.professional?.github || '',
+      portfolio: extractedProfile?.professional?.portfolio || '',
+      yearsOfExperience: extractedProfile?.professional?.yearsOfExperience || 0,
     },
-    skills: skills,
-    // IMPORTANT: Preserve work and education from extractedProfile (if editing existing profile)
+    skills,
     work: extractedProfile?.work || [],
     education: extractedProfile?.education || [],
-    summary: (formData.get('summary') as string) || '',
+    summary,
     resumeText: extractedProfile?.resumeText || '',
-    // IMPORTANT: Preserve selfId and workAuth from extractedProfile (if editing existing profile)
     selfId: extractedProfile?.selfId,
     workAuth: extractedProfile?.workAuth,
+    lastUpdated: Date.now(),
   };
-  
+
   console.log('[Onboarding] Collected profile from form:', {
     hasWork: profile.work.length > 0,
     hasEducation: profile.education.length > 0,
     hasSelfId: !!profile.selfId,
     hasWorkAuth: !!profile.workAuth,
   });
-  
+
   return profile;
 }
 
@@ -894,8 +1282,8 @@ function createEmptyProfile(): UserProfile {
       firstName: '',
       lastName: '',
       email: '',
-      phone: '',
-      location: ''
+      phone: { countryCode: '+1', number: '', formatted: '' } as PhoneDetails,
+      location: { city: '', state: '', country: 'United States' } as LocationDetails,
     },
     professional: {
       linkedin: '',
@@ -1009,6 +1397,27 @@ function preFillSelfIdForm(selfId: any): void {
       disabilityRadio.checked = true;
     }
   }
+
+  // Ethnicity radio buttons
+  if (selfId.ethnicity) {
+    const ethnicityRadio = document.querySelector(`input[name="ethnicity"][value="${selfId.ethnicity}"]`) as HTMLInputElement;
+    if (ethnicityRadio) ethnicityRadio.checked = true;
+  }
+
+  // Age
+  const exactAgeInput  = document.getElementById('selfIdExactAge') as HTMLInputElement | null;
+  const ageRangeSelect = document.getElementById('selfIdAgeRange') as HTMLSelectElement | null;
+  if (selfId.age !== undefined && exactAgeInput) {
+    const exactRadio = document.querySelector<HTMLInputElement>('input[name="ageOption"][value="exact"]');
+    if (exactRadio) exactRadio.checked = true;
+    exactAgeInput.value = String(selfId.age);
+    exactAgeInput.style.display = 'block';
+  } else if (selfId.ageRange && ageRangeSelect) {
+    const rangeRadio = document.querySelector<HTMLInputElement>('input[name="ageOption"][value="range"]');
+    if (rangeRadio) rangeRadio.checked = true;
+    ageRangeSelect.value = selfId.ageRange;
+    ageRangeSelect.style.display = 'block';
+  }
 }
 
 /**
@@ -1033,6 +1442,92 @@ function setupMutuallyExclusiveGender(): void {
   });
   
   console.log('[Onboarding] Setup mutually exclusive gender selection');
+}
+
+/**
+ * Setup self-ID form interactivity: age toggle, gender "Other" text reveal.
+ */
+function setupSelfIdFormInteractivity(): void {
+  // Age option radios — show/hide exact age input or age range select
+  const ageRadios = document.querySelectorAll<HTMLInputElement>('input[name="ageOption"]');
+  const exactAgeInput  = document.getElementById('selfIdExactAge') as HTMLInputElement | null;
+  const ageRangeSelect = document.getElementById('selfIdAgeRange') as HTMLSelectElement | null;
+
+  ageRadios.forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (!exactAgeInput || !ageRangeSelect) return;
+      if (radio.value === 'exact' && radio.checked) {
+        exactAgeInput.style.display = 'block';
+        ageRangeSelect.style.display = 'none';
+      } else if (radio.value === 'range' && radio.checked) {
+        exactAgeInput.style.display = 'none';
+        ageRangeSelect.style.display = 'block';
+      } else {
+        exactAgeInput.style.display = 'none';
+        ageRangeSelect.style.display = 'none';
+      }
+    });
+  });
+
+  // Gender "Other" checkbox — reveal free-text input
+  const genderOtherCheck = document.getElementById('genderOtherCheck') as HTMLInputElement | null;
+  const genderOtherText  = document.getElementById('genderOtherText') as HTMLInputElement | null;
+  if (genderOtherCheck && genderOtherText) {
+    genderOtherCheck.addEventListener('change', () => {
+      genderOtherText.style.display = genderOtherCheck.checked ? 'block' : 'none';
+    });
+  }
+}
+
+/**
+ * Collect self-identification data from the Self-ID form.
+ */
+function collectSelfIdFromForm(): SelfIdentification {
+  const getCheckedValues = (name: string): string[] => {
+    const checkboxes = document.querySelectorAll<HTMLInputElement>(`input[name="${name}"]:checked`);
+    return Array.from(checkboxes).map(cb => cb.value);
+  };
+
+  const getRadioValue = (name: string): string => {
+    const radio = document.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`);
+    return radio ? radio.value : '';
+  };
+
+  // Gender: collect checked, append custom "Other" text if applicable
+  let gender = getCheckedValues('gender');
+  const genderOtherText = (document.getElementById('genderOtherText') as HTMLInputElement | null)?.value.trim();
+  if (gender.includes('Other') && genderOtherText) {
+    gender = gender.filter(g => g !== 'Other');
+    gender.push(genderOtherText);
+  }
+
+  // Age
+  let age: number | undefined;
+  let ageRange: string | undefined;
+  const ageOptionRadio = document.querySelector<HTMLInputElement>('input[name="ageOption"]:checked');
+  if (ageOptionRadio?.value === 'exact') {
+    const exactAge = parseInt((document.getElementById('selfIdExactAge') as HTMLInputElement | null)?.value || '', 10);
+    if (!isNaN(exactAge) && exactAge > 0) age = exactAge;
+  } else if (ageOptionRadio?.value === 'range') {
+    const rangeVal = (document.getElementById('selfIdAgeRange') as HTMLSelectElement | null)?.value;
+    if (rangeVal) ageRange = rangeVal;
+  }
+
+  const selfId: SelfIdentification = {
+    gender,
+    race: getCheckedValues('race'),
+    orientation: getCheckedValues('orientation'),
+    veteran:     getRadioValue('veteran')     || "I don't wish to answer",
+    transgender: getRadioValue('transgender') || 'Decline to self-identify',
+    disability:  getRadioValue('disability')  || "I don't wish to answer",
+    ethnicity:   getRadioValue('ethnicity')   || undefined,
+  };
+
+  if (age !== undefined) selfId.age = age;
+  if (ageRange)          selfId.ageRange = ageRange;
+
+  console.log('[Onboarding] Collected self-ID data:', selfId);
+  return selfId;
 }
 
 /**
@@ -1083,143 +1578,175 @@ function preFillWorkAuthForm(workAuth: any): void {
   setupWorkAuthConditionalFields();
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+/** Format a relative time string (e.g. "2 days ago"). */
+function relativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (days >= 1) return `${days} day${days > 1 ? 's' : ''} ago`;
+  if (hours >= 1) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  if (minutes >= 1) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+  return 'just now';
+}
+
+/** Derive a confidence bar color class. */
+function confidenceColorClass(confidence: number): string {
+  if (confidence >= 0.8) return 'rl-bar--high';
+  if (confidence >= 0.6) return 'rl-bar--medium';
+  return 'rl-bar--low';
+}
+
+/** Render a single learned pattern card. */
+function renderPatternCard(pattern: LearnedPattern): HTMLElement {
+  const pct = Math.round(pattern.confidence * 100);
+  const colorClass = confidenceColorClass(pattern.confidence);
+  const lastUsedStr = relativeTime(pattern.lastUsed);
+  const lastCtx = pattern.contexts[pattern.contexts.length - 1];
+  const contextStr = lastCtx
+    ? `${lastCtx.company || 'Unknown company'}${lastCtx.jobTitle ? ` — ${lastCtx.jobTitle}` : ''}`
+    : '';
+
+  const card = document.createElement('div');
+  card.className = 'rl-card';
+  card.dataset.patternId = pattern.id;
+
+  // Capitalise field label for display
+  const displayLabel = pattern.fieldLabel
+    ? pattern.fieldLabel.charAt(0).toUpperCase() + pattern.fieldLabel.slice(1)
+    : pattern.fieldType;
+
+  card.innerHTML = `
+    <div class="rl-card__header">
+      <span class="rl-card__field-name">${displayLabel}</span>
+      <button class="rl-card__delete" data-pattern-id="${pattern.id}" title="Delete this learned pattern">Delete</button>
+    </div>
+    <div class="rl-card__divider"></div>
+    <div class="rl-card__learned-label">Learned value</div>
+    <div class="rl-card__learned-value">${pattern.learnedValue || '(empty)'}</div>
+    <div class="rl-card__confidence-row">
+      <div class="rl-bar ${colorClass}">
+        <div class="rl-bar__fill" style="width: ${pct}%"></div>
+      </div>
+      <span class="rl-bar__pct">${pct}%</span>
+    </div>
+    <div class="rl-card__stats">
+      Used successfully ${pattern.successCount} time${pattern.successCount !== 1 ? 's' : ''}
+      &nbsp;&middot;&nbsp; Last used ${lastUsedStr}
+      ${contextStr ? `<div class="rl-card__ctx">${contextStr}</div>` : ''}
+    </div>
+  `;
+
+  return card;
+}
+
 /**
- * Load and display learned values
+ * Load and display learned patterns from the RL system.
  */
 async function loadLearnedValues(showBackButton = false): Promise<void> {
   try {
-    const result = await browser.storage.local.get('field_corrections');
-    const corrections = result.field_corrections || [];
-    
+    // Ensure RL system is ready
+    await rlSystem.initialize();
+
     const container = document.getElementById('learnedValuesContainer');
     if (!container) return;
-    
-    // Update button group to show/hide back button
+
+    // Update button group
     const buttonGroup = document.getElementById('learnedButtonGroup');
     if (buttonGroup) {
       if (showBackButton) {
         buttonGroup.innerHTML = `
           <button id="backFromLearnedBtn" class="btn btn-secondary">Back</button>
-          <button id="doneFromLearnedBtn" class="btn btn-primary">Done</button>
+          <button id="clearAllLearnedBtn" class="btn btn-outline-danger">Clear All</button>
         `;
-        // Re-attach back button listener
         const backBtn = document.getElementById('backFromLearnedBtn');
         if (backBtn) {
-          backBtn.addEventListener('click', () => {
-            showStep('step-success');
-          });
-        }
-        // Re-attach done button listener
-        const doneBtn = document.getElementById('doneFromLearnedBtn');
-        if (doneBtn) {
-          doneBtn.addEventListener('click', () => {
-            window.close();
-          });
+          backBtn.addEventListener('click', () => showStep('step-success'));
         }
       } else {
         buttonGroup.innerHTML = `
-          <button id="doneFromLearnedBtn" class="btn btn-primary">Close</button>
+          <a id="doneFromLearnedBtn" class="btn btn-primary" href="../home/home.html">Back to Home</a>
+          <button id="clearAllLearnedBtn" class="btn btn-outline-danger">Clear All</button>
         `;
-        // Re-attach close button listener
-        const doneBtn = document.getElementById('doneFromLearnedBtn');
-        if (doneBtn) {
-          doneBtn.addEventListener('click', () => {
-            window.close();
-          });
-        }
+      }
+
+      // Wire up Clear All button
+      const clearAllBtn = document.getElementById('clearAllLearnedBtn');
+      if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', async () => {
+          const confirmed = window.confirm(
+            'Clear all learned patterns? This cannot be undone.'
+          );
+          if (!confirmed) return;
+          await rlSystem.clearAll();
+          const hasBack = document.getElementById('backFromLearnedBtn') !== null;
+          await loadLearnedValues(hasBack);
+        });
       }
     }
-    
-    // Clear container
+
+    // Fetch patterns
+    const patterns = await rlSystem.getAllPatterns();
+
     container.innerHTML = '';
-    
-    if (corrections.length === 0) {
+
+    if (patterns.length === 0) {
       container.innerHTML = `
-        <div class="empty-learned-state">
-          <h3>No learned values yet</h3>
-          <p>The system will learn from your manual edits as you use the extension.</p>
+        <div class="rl-empty-state">
+          <div class="rl-empty-state__icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/>
+              <path d="M12 8v4m0 4h.01"/>
+            </svg>
+          </div>
+          <h3 class="rl-empty-state__title">No learned patterns yet</h3>
+          <p class="rl-empty-state__desc">
+            The system will learn as you use the extension. When you manually correct
+            an autofilled value, it will appear here with a confidence score.
+          </p>
         </div>
       `;
       return;
     }
-    
-    // Display each learned value
-    corrections.forEach((correction: any, index: number) => {
-      const card = document.createElement('div');
-      card.className = 'learned-value-card';
-      card.dataset.index = String(index);
-      
-      const date = new Date(correction.timestamp).toLocaleString();
-      const company = correction.context?.company || 'Unknown';
-      const jobTitle = correction.context?.jobTitle || 'Unknown position';
-      
-      card.innerHTML = `
-        <div class="learned-value-info">
-          <div class="learned-value-field">${correction.fieldLabel || correction.fieldType}</div>
-          <div class="learned-value-change">
-            <span class="learned-value-label">Auto-filled:</span>
-            <span class="learned-value-text">${correction.autoFilledValue || '(empty)'}</span>
-          </div>
-          <div class="learned-value-change">
-            <span class="learned-value-label">You changed to:</span>
-            <span class="learned-value-text">${correction.userCorrectedValue}</span>
-          </div>
-          <div class="learned-value-meta">
-            ${company} - ${jobTitle} • ${date}
-          </div>
-        </div>
-        <div class="learned-value-actions">
-          <button class="btn-delete" data-index="${index}">🗑️ Delete</button>
-        </div>
-      `;
-      
+
+    // Render each pattern card
+    for (const pattern of patterns) {
+      const card = renderPatternCard(pattern);
       container.appendChild(card);
-    });
-    
-    // Add delete listeners
-    const deleteButtons = container.querySelectorAll('.btn-delete');
-    deleteButtons.forEach(button => {
-      button.addEventListener('click', async (e) => {
+    }
+
+    // Wire up delete buttons
+    container.querySelectorAll('.rl-card__delete').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
         const target = e.target as HTMLElement;
-        const index = parseInt(target.dataset.index || '0', 10);
-        await deleteLearnedValue(index);
+        const patternId = target.dataset.patternId;
+        if (!patternId) return;
+
+        const confirmed = window.confirm('Delete this learned pattern?');
+        if (!confirmed) return;
+
+        await rlSystem.deletePattern(patternId);
+        const hasBack = document.getElementById('backFromLearnedBtn') !== null;
+        await loadLearnedValues(hasBack);
       });
     });
-    
-    console.log('[Onboarding] Loaded', corrections.length, 'learned values');
+
+    console.log('[Onboarding] Displayed', patterns.length, 'RL patterns');
   } catch (err) {
     console.error('[Onboarding] Failed to load learned values:', err);
   }
 }
 
 /**
- * Delete a learned value by index
+ * @deprecated Use rlSystem.deletePattern() directly via the card buttons.
+ * Kept as a stub to avoid breaking any external callers.
  */
-async function deleteLearnedValue(index: number): Promise<void> {
-  try {
-    const result = await browser.storage.local.get('field_corrections');
-    const corrections = result.field_corrections || [];
-    
-    if (index < 0 || index >= corrections.length) {
-      console.error('[Onboarding] Invalid index:', index);
-      return;
-    }
-    
-    // Remove the correction
-    corrections.splice(index, 1);
-    
-    // Save back to storage
-    await browser.storage.local.set({ field_corrections: corrections });
-    
-    console.log('[Onboarding] Deleted learned value. Remaining:', corrections.length);
-    
-    // Reload the display (preserve back button state)
-    const hasBackButton = document.getElementById('backFromLearnedBtn') !== null;
-    await loadLearnedValues(hasBackButton);
-  } catch (err) {
-    console.error('[Onboarding] Failed to delete learned value:', err);
-    alert('Failed to delete learned value. Please try again.');
-  }
+async function deleteLearnedValue(_index: number): Promise<void> {
+  const hasBack = document.getElementById('backFromLearnedBtn') !== null;
+  await loadLearnedValues(hasBack);
 }
 
 /**
@@ -1324,23 +1851,84 @@ async function migrateResumeFileStorage(): Promise<void> {
   }
 }
 
+/**
+ * Save resume file using chunked storage to handle large files (> ~300KB)
+ * browser.storage.local struggles with single keys > ~400KB
+ */
+async function saveResumeWithChunking(file: File): Promise<void> {
+  const CHUNK_SIZE = 100 * 1024; // 100KB per chunk (in base64 chars)
+
+  const arrayBuffer = await file.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+
+  // Convert to base64
+  let binary = '';
+  const readChunkSize = 8192;
+  for (let i = 0; i < uint8Array.length; i += readChunkSize) {
+    const chunk = uint8Array.subarray(i, i + readChunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  const base64Data = btoa(binary);
+
+  const chunkCount = Math.ceil(base64Data.length / CHUNK_SIZE);
+  console.log(`[Resume] Saving "${file.name}" as ${chunkCount} chunks (${base64Data.length} base64 chars)`);
+
+  // Remove old single-key format first to free space
+  try {
+    await browser.storage.local.remove('resumeFile');
+    // Also remove stale chunks from a previous upload
+    const existingMeta = (await browser.storage.local.get('resumeFileMeta')).resumeFileMeta;
+    if (existingMeta?.chunkCount) {
+      const oldKeys = Array.from({ length: existingMeta.chunkCount }, (_, i) => `resumeChunk_${i}`);
+      await browser.storage.local.remove(oldKeys);
+    }
+  } catch (_) { /* ignore cleanup errors */ }
+
+  // Save metadata first
+  await browser.storage.local.set({
+    resumeFileMeta: {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      lastUpdated: Date.now(),
+      chunkCount,
+      chunked: true,
+    }
+  });
+
+  // Save each chunk
+  for (let i = 0; i < chunkCount; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, base64Data.length);
+    await browser.storage.local.set({ [`resumeChunk_${i}`]: base64Data.slice(start, end) });
+    console.log(`[Resume] Saved chunk ${i + 1}/${chunkCount}`);
+  }
+
+  console.log(`[Resume] Resume saved successfully (${chunkCount} chunks)`);
+}
+
 async function init(): Promise<void> {
   // First, try to migrate any legacy bloated resume file storage
   await migrateResumeFileStorage();
   
-  // Check if we should show learned values directly
+  // Deep-link: open directly on the Learned Values step
+  // Set by the popup "View Learned Values" button and the dashboard link.
   try {
     const flags = await browser.storage.local.get('showLearnedValues');
     if (flags.showLearnedValues) {
-      console.log('[Onboarding] Showing learned values page...');
       await browser.storage.local.remove('showLearnedValues');
-      await loadLearnedValues(false); // No back button when coming from popup
+      await rlSystem.initialize();
+      await loadLearnedValues(false);
       showStep('step-learned');
-      return;
+      // Hide the wizard nav and progress indicator — not needed for this view
+      const wizard = document.getElementById('stepWizard');
+      if (wizard) wizard.style.display = 'none';
+      const indicator = document.getElementById('stepIndicator');
+      if (indicator) (indicator.closest('.wizard-header') as HTMLElement | null)?.style && ((indicator.closest('.wizard-header') as HTMLElement).style.display = 'none');
+      return; // Skip normal onboarding init
     }
   } catch (err) {
     console.warn('[Onboarding] Failed to check learned values flag:', err);
-    // Continue with normal initialization
   }
   
   // Check if we're editing an existing profile
@@ -1398,7 +1986,7 @@ async function init(): Promise<void> {
         const startFreshBtn = document.createElement('button');
         startFreshBtn.id = 'startFreshBtn';
         startFreshBtn.className = 'btn btn-secondary';
-        startFreshBtn.textContent = '🔄 Start Fresh (Upload New Resume)';
+        startFreshBtn.textContent = 'Start Fresh (Upload New Resume)';
         startFreshBtn.style.cssText = 'margin-bottom: 16px; width: 100%;';
         startFreshBtn.onclick = () => {
           if (confirm('This will discard your current profile and start from scratch. Continue?')) {
@@ -1424,6 +2012,9 @@ async function init(): Promise<void> {
   // Check connection status on load
   const connected = await checkConnection();
   updateConnectionStatus(connected);
+
+  // Setup Ollama step event listeners
+  setupOllamaStepListeners();
   
   const uploadArea = document.getElementById('uploadArea');
   const fileInput = document.getElementById('fileInput') as HTMLInputElement;
@@ -1468,12 +2059,13 @@ async function init(): Promise<void> {
     });
   }
   
-  // Skip upload button - go directly to manual entry
+  // Skip upload button - go directly to Ollama step then manual entry
   if (skipUploadBtn) {
     skipUploadBtn.addEventListener('click', () => {
       extractedProfile = createEmptyProfile();
       renderProfilePreview(extractedProfile);
-      showStep('step-review');
+      showStep('step-ollama');
+      checkOllamaConnection();
     });
   }
   
@@ -1505,10 +2097,11 @@ async function init(): Promise<void> {
         updateProgress('done', 100, 'All done!');
         await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause to show completion
         
-        // Show review step
+        // Show Ollama setup step (which then leads to review)
         hideProgress();
         renderProfilePreview(profile);
-        showStep('step-review');
+        showStep('step-ollama');
+        checkOllamaConnection();
       } catch (err) {
         hideProgress();
         showStatus('error', err instanceof Error ? err.message : 'Failed to parse resume');
@@ -1525,44 +2118,35 @@ async function init(): Promise<void> {
     });
   }
   
-  // Save button (review step) - go to self-ID
+  // Save button (review step) - validate and go to links
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
       if (!extractedProfile) return;
       
       try {
-        // Collect edited profile data from form
         const editedProfile = collectProfileFromForm();
         if (!editedProfile) {
-          alert('Failed to collect profile data from form');
+          alert('Please fill in all required fields: First Name, Last Name, and Email.');
           return;
         }
         
-        // Validate required fields
-        if (!editedProfile.personal.firstName || !editedProfile.personal.lastName || !editedProfile.personal.email) {
-          alert('Please fill in all required fields (First Name, Last Name, Email)');
-          return;
-        }
-        
-        // Store the profile temporarily (will save with self-ID data)
+        // Store the profile temporarily
         extractedProfile = editedProfile;
         
-        console.log('[Onboarding] Moving to self-ID step');
-        
-        // Move to self-ID step
-        showStep('step-selfid');
-        
-        console.log('[Onboarding] Self-ID step should now be visible');
+        console.log('[Onboarding] Moving to links step');
+        prefillLinksForm(editedProfile);
+        showStep('step-links');
       } catch (err) {
         alert('Failed to proceed: ' + (err instanceof Error ? err.message : 'Unknown error'));
       }
     });
   }
 
-  // Setup mutually exclusive gender selection (must be called after DOM is ready)
+  // Setup mutually exclusive gender selection and self-ID interactivity (after DOM ready)
   setTimeout(() => {
     setupMutuallyExclusiveGender();
-    
+    setupSelfIdFormInteractivity();
+
     if (existingProfile && existingProfile.selfId) {
       preFillSelfIdForm(existingProfile.selfId);
     }
@@ -1572,14 +2156,6 @@ async function init(): Promise<void> {
     }
   }, 100);
   
-  // Back button from Self-ID step
-  const backFromSelfIdBtn = document.getElementById('backFromSelfIdBtn');
-  if (backFromSelfIdBtn) {
-    backFromSelfIdBtn.addEventListener('click', () => {
-      showStep('step-review');
-    });
-  }
-  
   // Back button from Work Auth step
   const backFromWorkAuthBtn = document.getElementById('backFromWorkAuthBtn');
   if (backFromWorkAuthBtn) {
@@ -1588,43 +2164,9 @@ async function init(): Promise<void> {
     });
   }
   
-  // Self-ID buttons - move to work auth instead of saving
-  const saveSelfIdBtn = document.getElementById('saveSelfIdBtn');
-  const skipSelfIdBtn = document.getElementById('skipSelfIdBtn');
-  
-  console.log('[Onboarding] Self-ID buttons:', { saveSelfIdBtn: !!saveSelfIdBtn, skipSelfIdBtn: !!skipSelfIdBtn });
-  
-  if (saveSelfIdBtn) {
-    saveSelfIdBtn.addEventListener('click', async () => {
-      console.log('[Onboarding] Save Self-ID clicked');
-      await saveSelfIdAndContinue(true);
-    });
-  } else {
-    console.warn('[Onboarding] saveSelfIdBtn not found in DOM');
-  }
-  
-  if (skipSelfIdBtn) {
-    skipSelfIdBtn.addEventListener('click', async () => {
-      console.log('[Onboarding] Skip Self-ID clicked');
-      await saveSelfIdAndContinue(false);
-    });
-  } else {
-    console.warn('[Onboarding] skipSelfIdBtn not found in DOM');
-  }
-  
-  // Watch for when Self-ID step becomes visible to pre-fill it
+  // Watch for when Work Auth step becomes visible to pre-fill it
   const observer = new MutationObserver(() => {
-    const selfIdStep = document.getElementById('step-selfid');
     const workAuthStep = document.getElementById('step-workauth');
-    
-    if (selfIdStep?.classList.contains('active')) {
-      // Setup mutually exclusive gender selection whenever Self-ID step is shown
-      setupMutuallyExclusiveGender();
-      
-      if (existingProfile?.selfId) {
-        preFillSelfIdForm(existingProfile.selfId);
-      }
-    }
     
     if (workAuthStep?.classList.contains('active') && existingProfile?.workAuth) {
       preFillWorkAuthForm(existingProfile.workAuth);
@@ -1640,42 +2182,112 @@ async function init(): Promise<void> {
     });
   }
 
-  // Work Authorization buttons
+  // Work Authorization buttons - now goes to cover letter step
   const saveWorkAuthBtn = document.getElementById('saveWorkAuthBtn');
-  const skipWorkAuthBtn = document.getElementById('skipWorkAuthBtn');
   
   if (saveWorkAuthBtn) {
     saveWorkAuthBtn.addEventListener('click', async () => {
-      console.log('[Onboarding] Save Work Auth clicked');
-      await saveFinalProfile(true);
-    });
-  }
-  
-  if (skipWorkAuthBtn) {
-    skipWorkAuthBtn.addEventListener('click', async () => {
-      console.log('[Onboarding] Skip Work Auth clicked');
-      await saveFinalProfile(false);
+      console.log('[Onboarding] Save Work Auth clicked, moving to cover letter');
+      if (extractedProfile) {
+        const workAuthData = collectWorkAuthData();
+        if (workAuthData) {
+          extractedProfile.workAuth = workAuthData;
+        }
+      }
+      showStep('step-coverletter');
     });
   }
 
   // Work Auth form conditional logic
   setupWorkAuthConditionalFields();
+
+  // --- Links step buttons ---
+  const backFromLinksBtn = document.getElementById('backFromLinksBtn');
+  if (backFromLinksBtn) {
+    backFromLinksBtn.addEventListener('click', () => {
+      showStep('step-review');
+    });
+  }
   
+  const saveLinksBtn = document.getElementById('saveLinksBtn');
+  if (saveLinksBtn) {
+    saveLinksBtn.addEventListener('click', () => {
+      collectLinksFromForm();
+      showStep('step-selfid');
+    });
+  }
+
+  // --- Self-ID step buttons ---
+  const backFromSelfIdBtn = document.getElementById('backFromSelfIdBtn');
+  if (backFromSelfIdBtn) {
+    backFromSelfIdBtn.addEventListener('click', () => {
+      showStep('step-links');
+    });
+  }
+
+  const saveSelfIdBtn = document.getElementById('saveSelfIdBtn');
+  if (saveSelfIdBtn) {
+    saveSelfIdBtn.addEventListener('click', () => {
+      if (extractedProfile) {
+        extractedProfile.selfId = collectSelfIdFromForm();
+      }
+      showStep('step-workauth');
+    });
+  }
+
+  // --- Cover Letter step buttons ---
+  const backFromCoverLetterBtn = document.getElementById('backFromCoverLetterBtn');
+  if (backFromCoverLetterBtn) {
+    backFromCoverLetterBtn.addEventListener('click', () => {
+      showStep('step-workauth');
+    });
+  }
+
+  const saveCoverLetterBtn = document.getElementById('saveCoverLetterBtn');
+  if (saveCoverLetterBtn) {
+    saveCoverLetterBtn.addEventListener('click', async () => {
+      collectCoverLetterFromForm();
+      await saveFinalProfile(false);
+    });
+  }
+
   // View Learned Values button (from success step)
   const viewLearnedBtn = document.getElementById('viewLearnedBtn');
   if (viewLearnedBtn) {
     viewLearnedBtn.addEventListener('click', async () => {
-      await loadLearnedValues(true); // Show back button when coming from success page
+      await loadLearnedValues(true);
       showStep('step-learned');
     });
   }
   
-  // Done button
+  // Done button - go to home page
   if (doneBtn) {
     doneBtn.addEventListener('click', () => {
-      window.close();
+      window.location.href = '../home/home.html';
     });
   }
+
+  // --- Exit button - navigate to home page ---
+  const exitBtn = document.getElementById('exitBtn');
+  if (exitBtn) {
+    exitBtn.addEventListener('click', () => {
+      window.location.href = '../home/home.html';
+    });
+  }
+
+  // --- Wizard step click navigation ---
+  const wizardSteps = document.querySelectorAll('.wizard-step');
+  wizardSteps.forEach((el, i) => {
+    (el as HTMLElement).style.cursor = 'pointer';
+    el.addEventListener('click', () => {
+      const targetStepId = STEP_ORDER[i];
+      if (!targetStepId) return;
+      // Only allow navigating to completed steps or the current active step
+      if (el.classList.contains('completed') || el.classList.contains('active')) {
+        showStep(targetStepId);
+      }
+    });
+  });
   
   // Raw data toggle
   const rawDataToggle = document.getElementById('rawDataToggle');

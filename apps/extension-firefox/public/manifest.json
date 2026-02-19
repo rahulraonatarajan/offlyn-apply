@@ -1,12 +1,15 @@
 {
   "manifest_version": 2,
-  "name": "Offlyn - Offline Job Application Assistant",
+  "name": "Offlyn Apply - Job Application Assistant",
   "version": "0.1.0",
-  "description": "Offline-first Firefox WebExtension for job application automation",
+  "description": "Smart job application assistant - auto-fill forms, track applications, generate cover letters",
   
   "icons": {
-    "48": "icons/icon-48.png",
-    "96": "icons/icon-96.png"
+    "16":  "icons/toolbar-16.png",
+    "32":  "icons/toolbar-32.png",
+    "48":  "icons/toolbar-48.png",
+    "96":  "icons/toolbar-96.png",
+    "128": "icons/toolbar-128.png"
   },
   
   "permissions": [
@@ -35,8 +38,30 @@
   
   "browser_action": {
     "default_popup": "popup/popup.html",
-    "default_title": "Offlyn"
+    "default_title": "Offlyn Apply",
+    "default_icon": {
+      "16":  "icons/toolbar-16.png",
+      "32":  "icons/toolbar-32.png",
+      "48":  "icons/toolbar-48.png",
+      "96":  "icons/toolbar-96.png",
+      "128": "icons/toolbar-128.png"
+    }
   },
+  
+  "web_accessible_resources": [
+    "icons/monogram.png",
+    "icons/monogram-nosquare.png",
+    "icons/monogram-icon.png",
+    "icons/monogram-transparent.png",
+    "icons/toolbar-16.png",
+    "icons/toolbar-32.png",
+    "icons/toolbar-48.png",
+    "icons/toolbar-96.png",
+    "icons/toolbar-128.png",
+    "icons/primary-logo.png",
+    "icons/cube-48.png",
+    "icons/header-icon-24.png"
+  ],
   
   "content_security_policy": "script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; object-src 'self'",
   

@@ -5,8 +5,9 @@
 import type { ApplyEvent, FillPlan, FillResult, JobMeta, FieldSchema } from './shared/types';
 import { extractJobMetadata, extractFormSchema, isJobApplicationPage } from './shared/dom';
 import { log, info, warn, error } from './shared/log';
-import { showFieldSummary, hideFieldSummary, ensureFieldSummaryExpanded } from './ui/field-summary';
-import { getUserProfile, type UserProfile } from './shared/profile';
+import { hideFieldSummary, ensureFieldSummaryExpanded } from './ui/field-summary';
+import { showCompatibilityWidget, updateCompatibilityFields, removeCompatibilityWidget } from './ui/compatibility-widget';
+import { getUserProfile, saveUserProfile, type UserProfile } from './shared/profile';
 import { generateFillMappings } from './shared/autofill';
 import { 
   analyzeUnfilledFields, 
@@ -28,7 +29,7 @@ import {
   validateFieldValue,
   type ValidationResult
 } from './shared/field-validator';
-import { learningSystem } from './shared/learning-system';
+import { rlSystem } from './shared/learning-rl';
 import { 
   generateBatchSuggestions, 
   filterSuggestionsByConfidence,
@@ -97,89 +98,30 @@ async function sendToBackground(event: ApplyEvent): Promise<void> {
  * Setup listeners to track user edits and learn from corrections
  */
 function setupUserEditTracking(): void {
-  // Track when user manually changes fields
-  document.addEventListener('input', (e) => {
-    if (autofillInProgress) return; // Ignore events during autofill
-    
-    const target = e.target as HTMLElement;
-    if (target instanceof HTMLInputElement || 
-        target instanceof HTMLTextAreaElement || 
-        target instanceof HTMLSelectElement) {
-      
-      // Get selector for this field
-      const selector = generateFieldSelector(target);
-      if (selector) {
-        userEditedFields.add(selector);
-        log(`User edited field: ${selector}`);
-        
-        // Check if this was an auto-filled field - record correction
-        recordUserCorrection(selector, target);
-      }
-    }
-  }, true);
-
-  // Also track on change event for dropdowns/checkboxes
-  document.addEventListener('change', (e) => {
+  // Track which fields the user has touched manually.
+  // We do NOT record corrections here — only at form submission.
+  // This prevents partial / in-progress edits from being stored.
+  function trackEdit(target: EventTarget | null): void {
     if (autofillInProgress) return;
-    
-    const target = e.target as HTMLElement;
-    if (target instanceof HTMLInputElement || 
-        target instanceof HTMLSelectElement) {
-      
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement
+    ) {
       const selector = generateFieldSelector(target);
       if (selector) {
         userEditedFields.add(selector);
-        log(`User changed field: ${selector}`);
-        
-        // Record correction
-        recordUserCorrection(selector, target);
       }
     }
-  }, true);
+  }
+
+  document.addEventListener('input',  (e) => trackEdit(e.target), true);
+  document.addEventListener('change', (e) => trackEdit(e.target), true);
 }
 
-/**
- * Record user correction for learning
- */
-async function recordUserCorrection(
-  selector: string,
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-): Promise<void> {
-  // Check if we auto-filled this field
-  const autoFilled = autoFilledValues.get(selector);
-  if (!autoFilled) {
-    return; // We didn't auto-fill this, so no correction to learn
-  }
-
-  // Get current (user-corrected) value
-  const userValue = getFieldValue(element);
-  
-  // Skip if user didn't actually change it
-  if (String(userValue) === String(autoFilled.value)) {
-    return;
-  }
-
-  info(`[Learning] User corrected "${autoFilled.field.label}": "${autoFilled.value}" → "${userValue}"`);
-
-  // Record the correction
-  try {
-    await learningSystem.recordCorrection(
-      autoFilled.field,
-      autoFilled.value,
-      userValue,
-      {
-        url: window.location.href,
-        company: lastJobMeta?.company,
-        jobTitle: lastJobMeta?.jobTitle,
-      }
-    );
-    
-    // Remove from auto-filled tracking (already learned from)
-    autoFilledValues.delete(selector);
-  } catch (err) {
-    error('[Learning] Failed to record correction:', err);
-  }
-}
+// recordUserCorrection has been removed.
+// All learning (corrections + successes + new values) is now done
+// at form-submission time inside learnFromCurrentFormValues().
 
 /**
  * Generate a selector for a field
@@ -207,18 +149,18 @@ function generateFieldSelector(field: HTMLInputElement | HTMLTextAreaElement | H
  */
 function detectPage(): void {
   try {
-    console.log('[Offlyn] detectPage() called');
-    console.log('[Offlyn] URL:', window.location.href);
+    console.log('[OA] detectPage() called');
+    console.log('[OA] URL:', window.location.href);
     
     const isJobPage = isJobApplicationPage();
-    console.log('[Offlyn] isJobApplicationPage():', isJobPage);
+    console.log('[OA] isJobApplicationPage():', isJobPage);
     
     if (!isJobPage) {
-      console.warn('[Offlyn] Page does not appear to be a job application page');
+      console.warn('[OA] Page does not appear to be a job application page');
       return;
     }
     
-    console.log('[Offlyn] ✓ Detected as job application page!');
+    console.log('[OA] ✓ Detected as job application page!');
     
     const jobMeta = extractJobMetadata();
     const forms = Array.from(document.querySelectorAll('form'));
@@ -308,9 +250,25 @@ function detectPage(): void {
       info('Detected job application page:', jobMeta.jobTitle || 'Unknown');
       sendToBackground(event);
       
-      // Show field summary UI with detected fields
-      showFieldSummary(uniqueFields, jobMeta.jobTitle || undefined, jobMeta.company || undefined);
-      
+      // Show unified floating widget (compatibility oval + action panel)
+      void (async () => {
+        try {
+          const profileForCompat = await getUserProfile();
+          if (profileForCompat) {
+            const pageText = document.body.innerText || '';
+            showCompatibilityWidget(
+              profileForCompat,
+              jobMeta.jobTitle || '',
+              jobMeta.company || '',
+              pageText,
+              uniqueFields,
+              browser.runtime.getURL('icons/monogram-nosquare.png'),
+              browser.runtime.getURL('icons/primary-logo.png')
+            );
+          }
+        } catch (_) { /* non-critical */ }
+      })();
+
       // Don't auto-fill automatically - wait for user to trigger it
       // tryAutoFill(uniqueFields);
     }
@@ -364,14 +322,26 @@ async function tryAutoFill(schema: ReturnType<typeof extractFormSchema>): Promis
     
     // Also try to fill resume file inputs (await to catch errors)
     await fillResumeFileInputs();
-    
+
     // Post-fill re-scan: Some fields appear dynamically after other fields are filled
     // (e.g., "Please identify your race" appears after Hispanic/Latino = "No")
     // Wait for React to re-render, then re-scan for newly appeared fields
     await postFillRescan(profile);
-    
+
     // Retry resume upload after post-fill rescan (file inputs may appear after form renders)
     await fillResumeFileInputs();
+
+    // Delayed retry for ATS sites that lazy-load file inputs (e.g. Workday)
+    setTimeout(async () => {
+      const newInputs = findAllFileInputs().filter(input => {
+        const id = input.id || input.name || generateInputSelector(input);
+        return !resumeFilesUploaded.has(id);
+      });
+      if (newInputs.length > 0) {
+        log(`[Resume] Delayed retry: found ${newInputs.length} new file input(s)`);
+        await fillResumeFileInputs();
+      }
+    }, 3000);
     
     // After basic autofill, show inline AI tiles on remaining empty text fields
     const unfilledCount = allDetectedFields.length - filledSelectors.size;
@@ -582,23 +552,13 @@ async function trySmartAutoFill(): Promise<void> {
           continue;
         }
         
-        // Check learning system first (faster than AI)
+        // Check RL learning system first (faster than AI, in-memory lookup)
         let value: string | null = null;
         try {
-          const suggestion = await learningSystem.suggestValue(
-            unfilled.field,
-            '', // No proposed value yet
-            {
-              url: window.location.href,
-              company: lastJobMeta?.company,
-            }
-          );
-          
-          // Only use learning when it suggests a non-empty value — never overwrite with empty
-          const suggestedStr = suggestion?.suggestedValue != null ? String(suggestion.suggestedValue).trim() : '';
-          if (suggestion && suggestion.confidence > 0.7 && suggestedStr !== '') {
-            info(`[Learning] Using learned value for "${unfilled.context.label}": "${suggestion.suggestedValue}"`);
-            value = String(suggestion.suggestedValue);
+          const learned = rlSystem.getLearnedValue(unfilled.field);
+          if (learned && learned.value.trim() !== '') {
+            info(`[RL] Using learned value for "${unfilled.context.label}": "${learned.value}" (confidence: ${learned.confidence.toFixed(2)})`);
+            value = learned.value;
           }
         } catch (err) {
           // Learning failed, continue to AI inference
@@ -1093,7 +1053,7 @@ async function waitForStateTransition(): Promise<void> {
       
       // Check 1: URL changed
       if (location.href !== startUrl) {
-        console.log('[Offlyn] State transition: URL changed');
+        console.log('[OA] State transition: URL changed');
         resolved = true;
         resolve();
         return;
@@ -1102,7 +1062,7 @@ async function waitForStateTransition(): Promise<void> {
       // Check 2: Step title changed
       const currentStepTitle = document.querySelector('[class*="step"], [class*="page"], h1, h2')?.textContent || '';
       if (currentStepTitle && currentStepTitle !== startStepTitle) {
-        console.log('[Offlyn] State transition: Step title changed');
+        console.log('[OA] State transition: Step title changed');
         resolved = true;
         resolve();
         return;
@@ -1124,7 +1084,7 @@ async function waitForStateTransition(): Promise<void> {
       }
       
       if (oldRequiredFields.size > 0 && detachedCount > oldRequiredFields.size * 0.5) {
-        console.log('[Offlyn] State transition: >50% of old fields detached');
+        console.log('[OA] State transition: >50% of old fields detached');
         resolved = true;
         resolve();
         return;
@@ -1132,7 +1092,7 @@ async function waitForStateTransition(): Promise<void> {
       
       // Check 4: Timeout - give up after max checks
       if (checkCount >= maxChecks) {
-        console.log('[Offlyn] State transition: timeout, proceeding anyway');
+        console.log('[OA] State transition: timeout, proceeding anyway');
         resolved = true;
         resolve();
         return;
@@ -1217,20 +1177,32 @@ function handleSubmitAttempt(e: Event): void {
 }
 
 /**
- * Snapshot all current field values and pass them to the learning system.
- * Called on form submit / "Apply" / "Next" clicks.
+ * Learn from ALL field values present at form submission.
+ *
+ * For each field with a non-empty value we decide:
+ *   1. Field was autofilled AND user kept the value  → recordSuccess  (positive RL)
+ *   2. Field was autofilled AND user changed the value → recordCorrection (negative RL)
+ *   3. Field was NOT autofilled (user typed it fresh)  → recordSuccess  (learn new value)
+ *
+ * After recording RL signals we also call updateProfileFromSubmission() to
+ * persist any new data back into the user's profile.
  */
 async function learnFromCurrentFormValues(
   fields: FieldSchema[],
   jobMeta: JobMeta | null
 ): Promise<void> {
   try {
-    const fieldValues = new Map<string, string>();
+    const jobCtx = {
+      url: window.location.href,
+      company: jobMeta?.company || '',
+      jobTitle: jobMeta?.jobTitle || '',
+    };
 
+    // Collect current DOM values for all fields
+    const fieldValues = new Map<string, string>(); // selector → current value
     for (const field of fields) {
       const el = document.querySelector(field.selector);
       if (!el) continue;
-
       const value = getFieldValue(el);
       if (value && value.trim()) {
         fieldValues.set(field.selector, value.trim());
@@ -1238,32 +1210,276 @@ async function learnFromCurrentFormValues(
     }
 
     if (fieldValues.size === 0) {
-      info('[Learning] No field values to learn from submission');
+      info('[RL] No field values found at submission — nothing to learn');
       return;
     }
 
-    const count = await learningSystem.learnFromSubmission(
-      fields,
-      fieldValues,
-      {
-        url: window.location.href,
-        company: jobMeta?.company,
-        jobTitle: jobMeta?.jobTitle,
-      }
-    );
+    let corrections = 0;
+    let successes = 0;
 
-    if (count > 0) {
-      info(`[Learning] ✓ Learned ${count} field values from form submission`);
-      showNotification('Learning', `Saved ${count} field values for future applications`, 'info', 2000);
+    for (const field of fields) {
+      // Skip file inputs, hidden fields, and disabled fields
+      if (field.type === 'file' || field.disabled) continue;
+
+      const currentValue = fieldValues.get(field.selector);
+      if (!currentValue) continue; // blank field — skip
+
+      const autoFilled = autoFilledValues.get(field.selector);
+
+      if (autoFilled) {
+        const autoStr = String(autoFilled.value).trim();
+        if (currentValue !== autoStr && currentValue !== '') {
+          // User changed an autofilled field → correction (negative signal)
+          info(`[RL] Correction at submit — "${field.label}": "${autoStr}" → "${currentValue}"`);
+          await rlSystem.recordCorrection(field, autoStr, currentValue, jobCtx);
+          corrections++;
+        } else {
+          // User kept the autofilled value → success (positive signal)
+          await rlSystem.recordSuccess(field, currentValue, jobCtx);
+          successes++;
+        }
+      } else {
+        // Field was NOT autofilled — user typed it themselves.
+        // Treat as a success so we learn this value for next time.
+        await rlSystem.recordSuccess(field, currentValue, jobCtx);
+        successes++;
+      }
     }
+
+    info(`[RL] Submission learning complete: ${successes} successes, ${corrections} corrections`);
+
+    if (successes + corrections > 0) {
+      showNotification(
+        'Learning updated',
+        `Saved ${successes + corrections} field value${successes + corrections !== 1 ? 's' : ''} for future applications`,
+        'info',
+        3000
+      );
+    }
+
+    // Persist new values into the user profile
+    await updateProfileFromSubmission(fieldValues, fields);
+
   } catch (err) {
-    error('[Learning] Error learning from submission:', err);
+    error('[RL] Error learning from submission:', err);
   }
 }
 
 /**
+ * Map submitted field values back into the user's stored profile.
+ *
+ * Only updates fields that are clearly identifiable (email, phone, LinkedIn,
+ * GitHub, portfolio, location, name) and only when the submitted value is
+ * non-empty and longer than what the profile already has (or when the profile
+ * field is empty).  This prevents overwriting good data with garbage.
+ */
+async function updateProfileFromSubmission(
+  fieldValues: Map<string, string>,   // selector → final submitted value
+  fields: FieldSchema[]
+): Promise<void> {
+  try {
+    const profile = await getUserProfile();
+    if (!profile) return;
+
+    let changed = false;
+
+    for (const field of fields) {
+      const value = fieldValues.get(field.selector);
+      if (!value || !value.trim()) continue;
+
+      const v = value.trim();
+      const label = (field.label || field.name || field.id || '').toLowerCase();
+      const name  = (field.name  || '').toLowerCase();
+      const id    = (field.id    || '').toLowerCase();
+
+      // Helper: does any of label/name/id include the keyword?
+      const has = (...keywords: string[]) =>
+        keywords.some(k => label.includes(k) || name.includes(k) || id.includes(k));
+
+      // ── Personal ───────────────────────────────────────────────────────
+
+      if (has('email', 'e-mail')) {
+        if (!profile.personal.email || profile.personal.email.trim() === '') {
+          profile.personal.email = v;
+          changed = true;
+        }
+      }
+
+      if (has('first', 'fname', 'firstname', 'given') &&
+          !has('last', 'lname', 'lastname')) {
+        if (!profile.personal.firstName || profile.personal.firstName.trim() === '') {
+          profile.personal.firstName = v;
+          changed = true;
+        }
+      }
+
+      if (has('last', 'lname', 'lastname', 'surname', 'family') &&
+          !has('first', 'fname')) {
+        if (!profile.personal.lastName || profile.personal.lastName.trim() === '') {
+          profile.personal.lastName = v;
+          changed = true;
+        }
+      }
+
+      if (has('phone', 'mobile', 'tel', 'telephone') &&
+          !has('country', 'code', 'extension', 'ext')) {
+        const existingPhone = typeof profile.personal.phone === 'string'
+          ? profile.personal.phone
+          : '';
+        // Only update if profile phone is empty or the user typed something longer/different
+        if (!existingPhone || existingPhone.trim() === '') {
+          profile.personal.phone = v;
+          changed = true;
+        }
+      }
+
+      if (has('location', 'city', 'address') &&
+          !has('country', 'state', 'zip', 'postal', 'sponsor', 'visa', 'authorize')) {
+        const existingLoc = typeof profile.personal.location === 'string'
+          ? profile.personal.location
+          : '';
+        if (!existingLoc || existingLoc.trim() === '') {
+          profile.personal.location = v;
+          changed = true;
+        }
+      }
+
+      // ── Professional ──────────────────────────────────────────────────
+
+      if (has('linkedin', 'linked-in')) {
+        if (!profile.professional.linkedin || profile.professional.linkedin.trim() === '') {
+          profile.professional.linkedin = v;
+          changed = true;
+        } else if (v.length > profile.professional.linkedin.length) {
+          // Accept longer (more complete) URL
+          profile.professional.linkedin = v;
+          changed = true;
+        }
+      }
+
+      if (has('github', 'git') && !has('ignore', 'skip')) {
+        if (!profile.professional.github || profile.professional.github.trim() === '') {
+          profile.professional.github = v;
+          changed = true;
+        } else if (v.length > profile.professional.github.length) {
+          profile.professional.github = v;
+          changed = true;
+        }
+      }
+
+      if (has('portfolio', 'website', 'personal site') &&
+          !has('hear', 'find', 'source')) {
+        if (!profile.professional.portfolio || profile.professional.portfolio.trim() === '') {
+          profile.professional.portfolio = v;
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      await saveUserProfile(profile);
+      info('[RL] Profile updated with values from form submission');
+    }
+  } catch (err) {
+    // Non-critical — log but don't throw
+    error('[RL] Failed to update profile from submission:', err);
+  }
+}
+
+/**
+ * Load resume from storage, handling both chunked (new) and single-key (legacy) formats.
+ * Chunked format is needed for resumes > ~300KB because browser.storage.local
+ * fails to retrieve large single keys.
+ */
+async function loadResumeFromStorage(): Promise<{ name: string; type: string; size: number; base64: string } | null> {
+  // Step 1: Read metadata (small key — should always succeed)
+  let meta: { name: string; type: string; size: number; chunkCount?: number; chunked?: boolean } | null = null;
+  try {
+    const metaResult = await browser.storage.local.get('resumeFileMeta');
+    meta = metaResult.resumeFileMeta || null;
+  } catch (metaErr) {
+    warn('[Resume] Could not read resumeFileMeta:', metaErr);
+    // Storage may be fully broken — nothing we can do without the metadata
+    return null;
+  }
+
+  // Step 2: Chunked format (new — saved after the storage fix)
+  if (meta?.chunked && meta.chunkCount && meta.chunkCount > 0) {
+    try {
+      log(`[Resume] Loading ${meta.chunkCount} chunks for "${meta.name}" (${meta.size} bytes)`);
+      const chunkKeys = Array.from({ length: meta.chunkCount }, (_, i) => `resumeChunk_${i}`);
+      const chunkResults = await browser.storage.local.get(chunkKeys);
+      const chunks: string[] = [];
+      for (let i = 0; i < meta.chunkCount; i++) {
+        const chunk = chunkResults[`resumeChunk_${i}`];
+        if (!chunk) {
+          error(`[Resume] Missing chunk ${i}/${meta.chunkCount} — please re-upload resume`);
+          return null;
+        }
+        chunks.push(chunk);
+      }
+      const base64 = chunks.join('');
+      log(`[Resume] Reassembled ${meta.chunkCount} chunks (${base64.length} chars)`);
+      return { name: meta.name, type: meta.type, size: meta.size, base64 };
+    } catch (chunkErr) {
+      error('[Resume] Failed to read chunks:', chunkErr);
+      return null;
+    }
+  }
+
+  // Step 3: Legacy single-key format (old — may be too large for Firefox to read)
+  // Wrap in its own try/catch: a large resumeFile key causes Firefox to throw
+  // "An unexpected error occurred". If that happens we auto-remove the corrupt key
+  // and notify the user to re-upload.
+  log('[Resume] Trying legacy single-key format...');
+  let resumeFile: any = null;
+  try {
+    const legacyResult = await browser.storage.local.get('resumeFile');
+    resumeFile = legacyResult.resumeFile;
+  } catch (legacyErr) {
+    warn('[Resume] Legacy resumeFile key too large to read — removing corrupt key. Please re-upload your resume.');
+    // Auto-clean the oversized key so future reads don't fail
+    try {
+      await browser.storage.local.remove('resumeFile');
+      log('[Resume] Removed oversized resumeFile key from storage');
+    } catch (_) { /* ignore */ }
+    showNotification(
+      'Resume needs re-upload',
+      'Your resume was stored in an old format. Please open Profile settings and re-upload it.',
+      'warning',
+      8000
+    );
+    return null;
+  }
+
+  if (resumeFile?.dataBase64 && resumeFile.dataBase64.length > 0) {
+    log(`[Resume] Loaded legacy base64 resume: ${resumeFile.name} (${resumeFile.size} bytes)`);
+    return { name: resumeFile.name, type: resumeFile.type, size: resumeFile.size, base64: resumeFile.dataBase64 };
+  }
+
+  if (resumeFile?.data && Array.isArray(resumeFile.data) && resumeFile.data.length > 0) {
+    // Very old number-array format — convert on the fly
+    log(`[Resume] Loaded legacy array resume: ${resumeFile.name} — converting to base64`);
+    const uint8Array = new Uint8Array(resumeFile.data);
+    let binary = '';
+    for (let i = 0; i < uint8Array.length; i += 8192) {
+      binary += String.fromCharCode(...uint8Array.subarray(i, i + 8192));
+    }
+    return { name: resumeFile.name, type: resumeFile.type, size: resumeFile.size, base64: btoa(binary) };
+  }
+
+  // Nothing found
+  if (meta) {
+    warn(`[Resume] Metadata found for "${meta.name}" (${meta.size} bytes) but no file data — please re-upload.`);
+  } else {
+    log('[Resume] No resume found in storage');
+  }
+  return null;
+}
+
+/**
  * Auto-fill resume file inputs
- * 
+ *
  * Supports multiple approaches for attaching resumes:
  * 1. Standard input[type="file"] (most ATS platforms)
  * 2. Greenhouse-style hidden file inputs triggered by drop zones
@@ -1272,93 +1488,60 @@ async function learnFromCurrentFormValues(
  */
 async function fillResumeFileInputs(): Promise<void> {
   try {
-    // Step 1: Retrieve stored resume file from extension storage
-    log('Attempting to load resume file from storage...');
-    let resumeFile: { name: string; type: string; size: number; data?: number[] | null; dataBase64?: string; lastUpdated?: number } | null = null;
-    
-    try {
-      const storageResult = await browser.storage.local.get('resumeFile');
-      resumeFile = storageResult.resumeFile;
-    } catch (storageErr) {
-      error('Failed to read resume from storage (file may be too large):', storageErr);
-      // Try reading just the metadata to see if the file exists
-      try {
-        const metaResult = await browser.storage.local.get('resumeFileMeta');
-        if (metaResult.resumeFileMeta) {
-          warn(`Resume file metadata exists (${metaResult.resumeFileMeta.name}, ${metaResult.resumeFileMeta.size} bytes) but data retrieval failed. Try re-uploading a smaller resume.`);
-        }
-      } catch (_) { /* ignore */ }
+    log('═══ Resume Upload: Starting ═══');
+
+    // Step 1: Load resume from storage (handles chunked + legacy formats)
+    const resumeData = await loadResumeFromStorage();
+
+    if (!resumeData) {
+      log('[Resume Upload] No resume found in storage — skipping');
       return;
     }
-    
-    // Check if we have data in either format (base64 or legacy number array)
-    const hasBase64 = resumeFile?.dataBase64 && resumeFile.dataBase64.length > 0;
-    const hasLegacyArray = resumeFile?.data && Array.isArray(resumeFile.data) && resumeFile.data.length > 0;
-    
-    if (!resumeFile || (!hasBase64 && !hasLegacyArray)) {
-      log('No resume file stored for auto-upload');
-      return;
-    }
-    
-    log(`Resume file loaded: ${resumeFile.name} (${resumeFile.size} bytes, type: ${resumeFile.type}, format: ${hasBase64 ? 'base64' : 'legacy-array'})`);
-    
-    // Step 2: Create the File object from stored data
+
+    log(`[Resume Upload] Loaded: ${resumeData.name} (${resumeData.size} bytes)`);
+
+    // Step 2: Create the File object from base64 data
     let file: File;
     try {
-      let uint8Array: Uint8Array;
-      
-      if (hasBase64 && resumeFile.dataBase64) {
-        // New base64 format (more efficient)
-        const binaryString = atob(resumeFile.dataBase64);
-        uint8Array = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          uint8Array[i] = binaryString.charCodeAt(i);
-        }
-      } else if (hasLegacyArray && resumeFile.data) {
-        // Legacy number array format
-        uint8Array = new Uint8Array(resumeFile.data);
-      } else {
-        log('No valid resume data found');
-        return;
+      const binaryString = atob(resumeData.base64);
+      const uint8Array = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        uint8Array[i] = binaryString.charCodeAt(i);
       }
-      
-      const blob = new Blob([uint8Array], { type: resumeFile.type });
-      file = new File([blob], resumeFile.name, { 
-        type: resumeFile.type,
-        lastModified: resumeFile.lastUpdated || Date.now()
-      });
-      log(`Created File object: ${file.name} (${file.size} bytes)`);
+      const blob = new Blob([uint8Array], { type: resumeData.type });
+      file = new File([blob], resumeData.name, { type: resumeData.type, lastModified: Date.now() });
+      log(`[Resume Upload] Created File object: ${file.name} (${file.size} bytes)`);
     } catch (fileErr) {
-      error('Failed to create File object from stored data:', fileErr);
+      error('[Resume Upload] Failed to create File object:', fileErr);
       return;
     }
-    
-    // Step 3: Find all file input fields (including hidden ones)
+
+    // Step 3: Find all file input fields
     const fileInputs = findAllFileInputs();
-    
+    log(`[Resume Upload] Found ${fileInputs.length} file input(s) on page`);
+
     if (fileInputs.length === 0) {
-      log('No file inputs found on page, checking for upload buttons/drop zones...');
-      // Try to trigger file upload by clicking upload buttons
+      log('[Resume Upload] No file inputs found — checking for upload buttons/drop zones...');
       const triggered = await triggerFileInputViaButton();
       if (triggered) {
-        // Wait for the file input to appear
         await new Promise(resolve => setTimeout(resolve, 500));
         const newFileInputs = findAllFileInputs();
         if (newFileInputs.length > 0) {
-          info(`Found ${newFileInputs.length} file input(s) after triggering upload button`);
+          info(`[Resume Upload] Found ${newFileInputs.length} file input(s) after triggering upload button`);
           await attachFileToInputs(newFileInputs, file);
         } else {
-          log('Still no file inputs after triggering upload button');
+          log('[Resume Upload] Still no file inputs after triggering upload button');
         }
       }
       return;
     }
-    
-    info(`Found ${fileInputs.length} file input(s), attempting resume upload`);
+
+    // Step 4: Attach file to inputs
     await attachFileToInputs(fileInputs, file);
-    
+    log('═══ Resume Upload: Complete ═══');
+
   } catch (err) {
-    error('Error in fillResumeFileInputs:', err);
+    error('[Resume Upload] Fatal error:', err);
   }
 }
 
@@ -1450,48 +1633,53 @@ async function triggerFileInputViaButton(): Promise<boolean> {
 }
 
 /**
- * Attach a File object to file input elements
+ * Attach a File object to file input elements.
+ * Returns { successCount, failedCount } for caller notification.
  */
-async function attachFileToInputs(fileInputs: HTMLInputElement[], file: File): Promise<void> {
+async function attachFileToInputs(fileInputs: HTMLInputElement[], file: File): Promise<{ successCount: number; failedCount: number }> {
+  let successCount = 0;
+  let failedCount = 0;
+
   for (const fileInput of fileInputs) {
     try {
-      // Generate unique identifier for this input
       const inputId = fileInput.id || fileInput.name || generateInputSelector(fileInput);
-      
-      // Check if we've already uploaded to this input
+      log(`[Resume] ─── Input: ${inputId}`);
+
+      // Skip already-uploaded inputs
       if (resumeFilesUploaded.has(inputId)) {
-        log(`Already uploaded resume to this input: ${inputId}`);
+        log(`[Resume] Already uploaded to: ${inputId} — skipping`);
         continue;
       }
-      
-      // Check if this is likely a resume upload field
+
+      // Check if this looks like a resume upload field
       const isResume = isResumeFileInput(fileInput);
-      
       if (!isResume) {
-        log(`Skipping file input (doesn't appear to be for resume): ${inputId}`);
+        log(`[Resume] Not a resume field, skipping: ${inputId}`);
         continue;
       }
-      
-      // Check if already has a file
+
+      // Skip if input already has a file
       if (fileInput.files && fileInput.files.length > 0) {
-        log(`File input already has a file: ${inputId}`);
+        log(`[Resume] Already has a file: ${inputId} — skipping`);
         continue;
       }
-      
-      // Attempt to set files using DataTransfer
+
+      const isVisible = fileInput.offsetParent !== null;
+      const isHiddenStyle = fileInput.style.display === 'none' || fileInput.style.visibility === 'hidden';
+      log(`[Resume] Visibility: ${isVisible ? 'visible' : 'not-in-layout'}, style hidden: ${isHiddenStyle}`);
+
       let success = false;
-      
-      // Method 1: DataTransfer API (works in most browsers)
+
+      // Method 1: DataTransfer API
+      log('[Resume] Trying Method 1: DataTransfer API...');
       try {
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(file);
-        
-        // Use Object.defineProperty as fallback if direct assignment is blocked
         try {
           fileInput.files = dataTransfer.files;
           success = fileInput.files.length > 0;
         } catch (assignErr) {
-          log('Direct files assignment failed, trying defineProperty approach');
+          log('[Resume] Direct files assignment failed, trying defineProperty...');
           Object.defineProperty(fileInput, 'files', {
             value: dataTransfer.files,
             writable: true,
@@ -1499,76 +1687,86 @@ async function attachFileToInputs(fileInputs: HTMLInputElement[], file: File): P
           });
           success = fileInput.files.length > 0;
         }
+        if (success) log('[Resume] Method 1 succeeded');
       } catch (dtErr) {
-        warn('DataTransfer approach failed:', dtErr);
+        log(`[Resume] Method 1 failed: ${(dtErr as Error).message}`);
       }
-      
-      // Method 2: ClipboardEvent with items (Firefox fallback)
+
+      // Method 2: ClipboardEvent (Firefox fallback)
       if (!success) {
+        log('[Resume] Trying Method 2: ClipboardEvent...');
         try {
-          log('Trying ClipboardEvent fallback for file upload');
           const dt = new DataTransfer();
           dt.items.add(file);
-          const event = new ClipboardEvent('paste', {
-            clipboardData: dt,
-            bubbles: true,
-            cancelable: true,
-          });
+          const event = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
           fileInput.dispatchEvent(event);
-          // Check if it worked
           success = fileInput.files !== null && fileInput.files.length > 0;
+          if (success) log('[Resume] Method 2 succeeded');
+          else log('[Resume] Method 2 dispatched but files not set');
         } catch (clipErr) {
-          warn('ClipboardEvent fallback failed:', clipErr);
+          log(`[Resume] Method 2 failed: ${(clipErr as Error).message}`);
         }
       }
-      
-      // Method 3: Drag and drop simulation
+
+      // Method 3: Drag-and-drop simulation
       if (!success) {
+        log('[Resume] Trying Method 3: Drag-and-drop simulation...');
         try {
-          log('Trying drag-and-drop simulation for file upload');
           const dt = new DataTransfer();
           dt.items.add(file);
-          
-          // Find the drop zone container
           const dropZone = fileInput.closest('[class*="drop"], [class*="upload"]') || fileInput.parentElement;
           const target = dropZone || fileInput;
-          
-          // Simulate drag enter, over, and drop
           target.dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt, bubbles: true }));
           target.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true }));
           target.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true }));
-          
           await new Promise(resolve => setTimeout(resolve, 200));
           success = fileInput.files !== null && fileInput.files.length > 0;
+          if (success) log('[Resume] Method 3 succeeded');
+          else log('[Resume] Method 3 dispatched but files not set');
         } catch (dragErr) {
-          warn('Drag-and-drop simulation failed:', dragErr);
+          log(`[Resume] Method 3 failed: ${(dragErr as Error).message}`);
         }
       }
-      
+
       if (success) {
-        // Dispatch standard events that React and other frameworks listen to
+        // Dispatch events for React/Vue/Angular to pick up the file
         fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-        
-        // Also dispatch a custom React-compatible event
-        const nativeInputEvent = new InputEvent('input', {
-          bubbles: true,
-          cancelable: false,
-          composed: true,
-        });
-        fileInput.dispatchEvent(nativeInputEvent);
-        
-        // Mark this input as filled
+        fileInput.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: false, composed: true }));
         resumeFilesUploaded.add(inputId);
-        info(`✓ Auto-uploaded resume "${file.name}" to: ${inputId}`);
+        successCount++;
+        info(`[Resume] Attached "${file.name}" to: ${inputId}`);
       } else {
-        warn(`✗ All file upload methods failed for: ${inputId}. The file input may need manual interaction.`);
+        failedCount++;
+        warn(`[Resume] All methods failed for: ${inputId} — manual upload required`);
       }
-      
+
     } catch (err) {
-      error('Failed to fill file input:', err);
+      error('[Resume] Error processing input:', err);
+      failedCount++;
     }
   }
+
+  log(`[Resume] Summary: ${successCount} succeeded, ${failedCount} failed`);
+
+  // Show user notification
+  if (successCount > 0) {
+    showNotification(
+      'Resume Attached',
+      `Attached ${file.name} to ${successCount} field${successCount > 1 ? 's' : ''}`,
+      'success',
+      3000
+    );
+  } else if (failedCount > 0) {
+    showNotification(
+      'Resume Upload Failed',
+      `Could not attach resume automatically. Please upload it manually.`,
+      'warning',
+      5000
+    );
+  }
+
+  return { successCount, failedCount };
 }
 
 /**
@@ -1613,13 +1811,18 @@ function isResumeFileInput(fileInput: HTMLInputElement): boolean {
   const hasResumeKeyword = resumeKeywords.some(kw => allText.includes(kw));
   const hasFileType = fileKeywords.some(kw => accept.includes(kw));
   
-  // Container text match (less specific, so also check it's in a form context)
+  // Container text match (less specific)
   const parentHasResumeKeyword = resumeKeywords.some(kw => parentText.includes(kw));
-  
-  // On job application pages, any file input accepting PDFs/DOCs is likely for resume
-  const isOnJobPage = document.querySelector('[class*="application"], [id*="application"], form') !== null;
-  
-  return hasResumeKeyword || (hasFileType && (parentHasResumeKeyword || isOnJobPage)) || (isOnJobPage && hasFileType);
+
+  // Also check sibling/nearby label text for "resume" or "cv"
+  const siblingText = (fileInput.previousElementSibling?.textContent || '').toLowerCase() +
+                      (fileInput.nextElementSibling?.textContent || '').toLowerCase();
+  const siblingHasResumeKeyword = resumeKeywords.some(kw => siblingText.includes(kw));
+
+  // Require an explicit resume keyword — either in field attributes, parent, or sibling.
+  // The old broad fallback "any file input on a job page that accepts PDFs" was attaching
+  // resumes to "Additional Attachments" and other file inputs that are not the resume field.
+  return hasResumeKeyword || (hasFileType && (parentHasResumeKeyword || siblingHasResumeKeyword));
 }
 
 /**
@@ -1716,7 +1919,7 @@ async function checkForValidationError(selector: string, fieldLabel: string): Pr
       if (errorElement) {
         const errorText = errorElement.textContent?.trim();
         if (errorText && errorText.length > 0 && errorText.length < 200) {
-          console.warn(`[Offlyn] ⚠️ Validation error for "${fieldLabel}": ${errorText}`);
+          console.warn(`[OA] ⚠️ Validation error for "${fieldLabel}": ${errorText}`);
           highlightFieldAsError(selector);
           return;
         }
@@ -1726,7 +1929,7 @@ async function checkForValidationError(selector: string, fieldLabel: string): Pr
   
   // Check if field itself is marked as invalid
   if (element.getAttribute('aria-invalid') === 'true') {
-    console.warn(`[Offlyn] ⚠️ Field "${fieldLabel}" marked as invalid`);
+    console.warn(`[OA] ⚠️ Field "${fieldLabel}" marked as invalid`);
     highlightFieldAsError(selector);
   }
 }
@@ -1754,7 +1957,7 @@ function handleExclusiveCheckbox(checkbox: HTMLInputElement): void {
   
   if (!isExclusive) return;
   
-  console.log('[Offlyn] Exclusive checkbox detected:', label);
+  console.log('[OA] Exclusive checkbox detected:', label);
   
   // Find other checkboxes in the same group
   let groupCheckboxes: HTMLInputElement[] = [];
@@ -1793,7 +1996,7 @@ function handleExclusiveCheckbox(checkbox: HTMLInputElement): void {
   
   // Uncheck all other checkboxes in the group
   if (groupCheckboxes.length > 0) {
-    console.log(`[Offlyn] Unchecking ${groupCheckboxes.length} other checkboxes in exclusive group`);
+    console.log(`[OA] Unchecking ${groupCheckboxes.length} other checkboxes in exclusive group`);
     for (const cb of groupCheckboxes) {
       if (cb.checked) {
         cb.checked = false;
@@ -1845,7 +2048,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
         if (host && host.shadowRoot) {
           element = host.shadowRoot.querySelector(fieldSelector);
           if (element) {
-            console.log('[Offlyn] Found field in Shadow DOM:', hostSelector);
+            console.log('[OA] Found field in Shadow DOM:', hostSelector);
           }
         }
       } else {
@@ -1889,24 +2092,16 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
         continue;
       }
 
-      // Query learning system for suggestions
+      // Query RL learning system for suggestions (in-memory, fast lookup)
       let finalValue = mapping.value;
       if (fieldSchema) {
         try {
-          const suggestion = await learningSystem.suggestValue(
-            fieldSchema,
-            mapping.value,
-            {
-              url: window.location.href,
-              company: lastJobMeta?.company,
-            }
-          );
-          
-          // Only apply learning when it suggests a non-empty value — never overwrite profile with empty
-          const suggestedStr = suggestion?.suggestedValue != null ? String(suggestion.suggestedValue).trim() : '';
-          if (suggestion && suggestion.confidence > 0.6 && suggestedStr !== '') {
-            info(`[Learning] Using learned value for "${fieldSchema.label}": "${suggestion.suggestedValue}" (${suggestion.reason})`);
-            finalValue = suggestion.suggestedValue;
+          const learned = rlSystem.getLearnedValue(fieldSchema);
+          // Only apply when learned value is non-empty and different from current mapping
+          const learnedStr = learned?.value?.trim() ?? '';
+          if (learned && learnedStr !== '' && learnedStr !== String(mapping.value).trim()) {
+            info(`[RL] Using learned value for "${fieldSchema.label}": "${learned.value}" (confidence: ${learned.confidence.toFixed(2)})`);
+            finalValue = learned.value;
           }
         } catch (err) {
           // Learning failed, use original value
@@ -1931,7 +2126,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
       if (mapping.selector.includes('::shadow::') && 
           (fieldType === 'autocomplete' || fieldType === 'select' || 
            fieldSchema?.shadowHost?.toLowerCase().includes('autocomplete'))) {
-        console.log('[Offlyn] Filling Shadow DOM dropdown/autocomplete:', mapping.selector, 'with:', finalValue);
+        console.log('[OA] Filling Shadow DOM dropdown/autocomplete:', mapping.selector, 'with:', finalValue);
         
         // For autocomplete fields, we need to:
         // 1. Set the value
@@ -1953,14 +2148,14 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
           
           if (host && host.shadowRoot) {
             const options = host.shadowRoot.querySelectorAll('[role="option"], li[data-value], .option, [class*="option"]');
-            console.log('[Offlyn] Found', options.length, 'options in dropdown');
+            console.log('[OA] Found', options.length, 'options in dropdown');
             
             for (const option of options) {
               const optionText = option.textContent?.trim().toLowerCase();
               const valueText = String(finalValue).toLowerCase();
               
               if (optionText?.includes(valueText) || valueText.includes(optionText || '')) {
-                console.log('[Offlyn] ✓ Clicking autocomplete option:', optionText);
+                console.log('[OA] ✓ Clicking autocomplete option:', optionText);
                 (option as HTMLElement).click();
                 await new Promise(resolve => setTimeout(resolve, 100));
                 break;
@@ -1971,14 +2166,14 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
       }
       // Handle regular autocomplete/dropdown fields (Lever, Greenhouse, Discord ATS, etc.)
       else if ((fieldType === 'autocomplete' || hasOptionsArray) && element instanceof HTMLInputElement) {
-        console.log('[Offlyn] Handling autocomplete/dropdown field:', mapping.selector);
-        console.log('[Offlyn] Field label:', fieldSchema?.label);
-        console.log('[Offlyn] Field type:', fieldType, '| Has options:', hasOptionsArray);
-        console.log('[Offlyn] Setting value:', finalValue);
+        console.log('[OA] Handling autocomplete/dropdown field:', mapping.selector);
+        console.log('[OA] Field label:', fieldSchema?.label);
+        console.log('[OA] Field type:', fieldType, '| Has options:', hasOptionsArray);
+        console.log('[OA] Setting value:', finalValue);
         
         // Skip fields with empty values
         if (!finalValue || String(finalValue).trim() === '') {
-          console.log('[Offlyn] Skipping field with empty value');
+          console.log('[OA] Skipping field with empty value');
           result.failedSelectors.push(mapping.selector);
           continue;
         }
@@ -1996,8 +2191,8 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
           );
           
           if (!hasMatch) {
-            console.warn(`[Offlyn] Value "${finalValue}" not in known options for ${fieldSchema.label}`);
-            console.warn('[Offlyn] Known options:', knownOptions.slice(0, 5).join(', '));
+            console.warn(`[OA] Value "${finalValue}" not in known options for ${fieldSchema.label}`);
+            console.warn('[OA] Known options:', knownOptions.slice(0, 5).join(', '));
             result.failedSelectors.push(mapping.selector);
             highlightFieldAsError(mapping.selector);
             showFieldLabel(mapping.selector, '✗ Invalid value');
@@ -2012,7 +2207,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
         // Workday and similar ATS systems render options lazily or require typing to fetch/expand
         
         // STEP 1: Open the dropdown and wait for listbox to appear
-        console.log('[Offlyn] Step 1: Opening combobox and waiting for listbox...');
+        console.log('[OA] Step 1: Opening combobox and waiting for listbox...');
         element.focus();
         element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         element.click();
@@ -2133,8 +2328,8 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
           
           // Click the best match if found
           if (bestMatch) {
-            console.log('[Offlyn] ✓ Best match:', bestMatch.text, `(score: ${bestMatch.score})`);
-            console.log('[Offlyn] Option element:', bestMatch.option.tagName, 'role:', bestMatch.option.getAttribute('role'), 'class:', bestMatch.option.className);
+            console.log('[OA] ✓ Best match:', bestMatch.text, `(score: ${bestMatch.score})`);
+            console.log('[OA] Option element:', bestMatch.option.tagName, 'role:', bestMatch.option.getAttribute('role'), 'class:', bestMatch.option.className);
             
             // Scroll option into view
             (bestMatch.option as HTMLElement).scrollIntoView({ block: 'nearest' });
@@ -2149,7 +2344,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
             // Check for clickable children (button, div with onClick, etc.)
             const clickableChild = optionEl.querySelector('button, [role="button"], div[class*="item"]');
             if (clickableChild) {
-              console.log('[Offlyn] Found clickable child:', clickableChild.tagName, clickableChild.className);
+              console.log('[OA] Found clickable child:', clickableChild.tagName, clickableChild.className);
               clickTarget = clickableChild as HTMLElement;
             }
             
@@ -2163,7 +2358,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
             // Wait longer for React to process and verify the value was set
             await new Promise(resolve => setTimeout(resolve, 400));
             const valueAfter = element.value;
-            console.log('[Offlyn] Input value before click:', valueBefore || '<empty string>', '| after click:', valueAfter || '<empty string>');
+            console.log('[OA] Input value before click:', valueBefore || '<empty string>', '| after click:', valueAfter || '<empty string>');
             
             // Check if this is a React-Select component (clicking an option clears the input - that's expected behavior)
             const isReactSelect = !!element.closest('[class*="select__"]') || 
@@ -2176,10 +2371,10 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
               const selectContainer = element.closest('[class*="select__"]') || element.parentElement?.closest('[class*="select__"]');
               const singleValue = selectContainer?.querySelector('[class*="single-value"], [class*="singleValue"]');
               if (singleValue || (valueBefore && !valueAfter)) {
-                console.log('[Offlyn] React-Select: option click accepted (input cleared = selection made)');
+                console.log('[OA] React-Select: option click accepted (input cleared = selection made)');
                 // Don't force value - React-Select manages it internally
               } else if (valueAfter === valueBefore || !valueAfter) {
-                console.log('[Offlyn] React-Select: click may not have worked, forcing value...');
+                console.log('[OA] React-Select: click may not have worked, forcing value...');
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
                 if (nativeInputValueSetter) { nativeInputValueSetter.call(element, bestMatch.text); } else { element.value = bestMatch.text; }
                 element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -2190,7 +2385,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
             }
             // For non-React-Select: if click didn't update input, force it
             else if (valueAfter === valueBefore || !valueAfter) {
-              console.log('[Offlyn] Click did not update input, forcing value via React...');
+              console.log('[OA] Click did not update input, forcing value via React...');
               const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
               if (nativeInputValueSetter) { nativeInputValueSetter.call(element, bestMatch.text); } else { element.value = bestMatch.text; }
               element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -2209,7 +2404,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
         let listbox = findAssociatedListbox(element);
         let realOptions = getRealOptions(listbox);
         
-        console.log('[Offlyn] Found', realOptions.length, 'options after initial open');
+        console.log('[OA] Found', realOptions.length, 'options after initial open');
         
         if (realOptions.length > 0) {
           optionClicked = await tryMatchOption(realOptions, valueToMatch);
@@ -2217,11 +2412,11 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
         
         // STEP 2: Type-to-search — for dropdowns that only show options after typing (Greenhouse/React-Select)
         if (!optionClicked && realOptions.length === 0) {
-          console.log('[Offlyn] Step 2: No options after initial open, typing prefix to trigger search...');
+          console.log('[OA] Step 2: No options after initial open, typing prefix to trigger search...');
           
           // Type the first few characters to trigger the dropdown's search/filter
           const prefix = valueStr.substring(0, Math.min(4, valueStr.length));
-          console.log('[Offlyn] Step 2: Typing prefix:', JSON.stringify(prefix));
+          console.log('[OA] Step 2: Typing prefix:', JSON.stringify(prefix));
           
           // Clear any existing value first
           element.value = '';
@@ -2298,17 +2493,17 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
             }
             
             if (realOptions.length > 0) {
-              console.log('[Offlyn] Step 2: Found', realOptions.length, 'options after', pollAttempts * 300, 'ms');
+              console.log('[OA] Step 2: Found', realOptions.length, 'options after', pollAttempts * 300, 'ms');
               optionClicked = await tryMatchOption(realOptions, valueToMatch);
               if (optionClicked) {
-                console.log('[Offlyn] Step 2: Successfully selected from dropdown');
+                console.log('[OA] Step 2: Successfully selected from dropdown');
               }
               break;
             }
           }
           
           if (!optionClicked && realOptions.length === 0) {
-            console.log('[Offlyn] Step 2: No options appeared after', maxPolls * 300, 'ms of polling');
+            console.log('[OA] Step 2: No options appeared after', maxPolls * 300, 'ms of polling');
           }
         }
         
@@ -2318,7 +2513,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
           const synonyms = getGenderSynonyms(valueToMatch).filter(s => s !== valueToMatch);
           for (const synonym of synonyms) {
             if (optionClicked) break;
-            console.log('[Offlyn] Step 2b: Retrying with gender synonym:', JSON.stringify(synonym));
+            console.log('[OA] Step 2b: Retrying with gender synonym:', JSON.stringify(synonym));
             
             // Clear the input first
             element.value = '';
@@ -2371,11 +2566,11 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
               }
               
               if (realOptions.length > 0) {
-                console.log('[Offlyn] Step 2b: Found', realOptions.length, 'options for synonym', JSON.stringify(synonym));
+                console.log('[OA] Step 2b: Found', realOptions.length, 'options for synonym', JSON.stringify(synonym));
                 // Match against the synonym value, not the original
                 optionClicked = await tryMatchOption(realOptions, synonym);
                 if (optionClicked) {
-                  console.log('[Offlyn] Step 2b: Successfully selected synonym option');
+                  console.log('[OA] Step 2b: Successfully selected synonym option');
                 }
                 break;
               }
@@ -2385,7 +2580,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
         
         // STEP 3: If still no match, try scrolling listbox to load virtualized options
         if (!optionClicked && listbox) {
-          console.log('[Offlyn] Step 3: Scrolling listbox to load virtualized options...');
+          console.log('[OA] Step 3: Scrolling listbox to load virtualized options...');
           
           for (let scrollAttempt = 0; scrollAttempt < 3; scrollAttempt++) {
             listbox.scrollTop = listbox.scrollTop + 200; // Scroll down
@@ -2398,12 +2593,12 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
             }
           }
           
-          console.log('[Offlyn] After scrolling:', realOptions.length, 'options');
+          console.log('[OA] After scrolling:', realOptions.length, 'options');
         }
         
         // STEP 4: Fallback to tokenized partial matching
         if (!optionClicked && realOptions.length > 0) {
-          console.log('[Offlyn] Step 4: Trying tokenized partial matching...');
+          console.log('[OA] Step 4: Trying tokenized partial matching...');
           
           // Tokenize the desired value (e.g., "United States" → ["united", "states"])
           // For very short values like "+1", split by any non-alphanumeric character
@@ -2418,7 +2613,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
           
           // Skip tokenized matching if no valid tokens (empty array would match everything)
           if (tokens.length === 0) {
-            console.log('[Offlyn] No valid tokens for matching, skipping tokenized step');
+            console.log('[OA] No valid tokens for matching, skipping tokenized step');
           } else {
             for (const option of realOptions) {
               const optionText = (option.textContent || '').toLowerCase().trim();
@@ -2426,7 +2621,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
               // Check if option contains all tokens
               const matchesAllTokens = tokens.every(token => optionText.includes(token));
               if (matchesAllTokens) {
-                console.log('[Offlyn] ✓ Tokenized match:', optionText);
+                console.log('[OA] ✓ Tokenized match:', optionText);
                 (option as HTMLElement).click();
                 optionClicked = true;
                 break;
@@ -2437,7 +2632,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
         
         // STEP 5: Keyboard fallback (last resort) — type full value char-by-char, then ArrowDown+Enter
         if (!optionClicked) {
-          console.log('[Offlyn] Step 5: Keyboard fallback (type full value + ArrowDown + Enter)...');
+          console.log('[OA] Step 5: Keyboard fallback (type full value + ArrowDown + Enter)...');
           
           // Clear any existing value
           element.value = '';
@@ -2490,7 +2685,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
           }
           
           if (realOptions.length > 0) {
-            console.log('[Offlyn] Step 5: Found', realOptions.length, 'options after full value, trying to select...');
+            console.log('[OA] Step 5: Found', realOptions.length, 'options after full value, trying to select...');
             optionClicked = await tryMatchOption(realOptions, valueToMatch);
           }
           
@@ -2510,11 +2705,11 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
             }
           }
           
-          console.log('[Offlyn] Keyboard fallback completed, current value:', element.value || '<empty>');
+          console.log('[OA] Keyboard fallback completed, current value:', element.value || '<empty>');
         }
         
         element.blur();
-        console.log('[Offlyn] ✓ Autocomplete field done:', fieldSchema?.label);
+        console.log('[OA] ✓ Autocomplete field done:', fieldSchema?.label);
         
         // Check for validation errors after blur
         await checkForValidationError(mapping.selector, fieldSchema?.label || '');
@@ -2551,7 +2746,8 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
           await checkForValidationError(mapping.selector, fieldSchema?.label || '');
         } else {
           // Regular text input - use smart fill (human-like typing → native setter fallback)
-          const success = await smartFillField(element, String(finalValue));
+          // Pass selector so retries can re-query the element if React re-renders it
+          const success = await smartFillField(element, String(finalValue), mapping.selector);
           if (!success) {
             warn(`Smart fill failed for ${mapping.selector}, value may not have stuck`);
           }
@@ -2561,7 +2757,7 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
         }
       } else if (element instanceof HTMLTextAreaElement) {
         // Textarea - use smart fill (human typing for short, native setter for long)
-        const success = await smartFillField(element, String(finalValue));
+        const success = await smartFillField(element, String(finalValue), mapping.selector);
         if (!success) {
           warn(`Smart fill failed for textarea ${mapping.selector}`);
         }
@@ -2979,7 +3175,7 @@ async function fillFieldWithValue(selector: string, value: string, fieldLabel: s
     if (selector.includes('::shadow::') && 
         (fieldType === 'autocomplete' || fieldType === 'select' || 
          fieldSchema?.shadowHost?.toLowerCase().includes('autocomplete'))) {
-      console.log('[Offlyn Smart] Filling Shadow DOM autocomplete/dropdown:', fieldLabel, 'with:', value);
+      console.log('[OA Smart] Filling Shadow DOM autocomplete/dropdown:', fieldLabel, 'with:', value);
       
       if (element instanceof HTMLInputElement && host) {
         element.value = value;
@@ -2992,14 +3188,14 @@ async function fillFieldWithValue(selector: string, value: string, fieldLabel: s
         // Try to click matching option
         if (host.shadowRoot) {
           const options = host.shadowRoot.querySelectorAll('[role="option"], li[data-value], .option, [class*="option"]');
-          console.log('[Offlyn Smart] Found', options.length, 'options');
+          console.log('[OA Smart] Found', options.length, 'options');
           
           for (const option of options) {
             const optionText = option.textContent?.trim().toLowerCase();
             const valueText = value.toLowerCase();
             
             if (optionText?.includes(valueText) || valueText.includes(optionText || '')) {
-              console.log('[Offlyn Smart] ✓ Clicking option:', optionText);
+              console.log('[OA Smart] ✓ Clicking option:', optionText);
               (option as HTMLElement).click();
               await new Promise(resolve => setTimeout(resolve, 100));
               break;
@@ -3013,7 +3209,7 @@ async function fillFieldWithValue(selector: string, value: string, fieldLabel: s
     }
     // Handle regular autocomplete/dropdown fields (Lever, Greenhouse, Discord, etc.)
     else if (fieldType === 'autocomplete' && element instanceof HTMLInputElement) {
-      console.log('[Offlyn Smart] Setting dropdown value (React-compat):', fieldLabel, 'with:', value);
+      console.log('[OA Smart] Setting dropdown value (React-compat):', fieldLabel, 'with:', value);
       
       // Focus + click to open dropdown (React needs both)
       element.focus();
@@ -3040,7 +3236,7 @@ async function fillFieldWithValue(selector: string, value: string, fieldLabel: s
           
           const optLower = optText.toLowerCase();
           if (optLower === valLower || optLower.includes(valLower) || valLower.includes(optLower)) {
-            console.log('[Offlyn Smart] ✓ Clicking option:', optText);
+            console.log('[OA Smart] ✓ Clicking option:', optText);
             (opt as HTMLElement).click();
             clicked = true;
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -3126,10 +3322,10 @@ async function handleTextTransform(action: string): Promise<void> {
   const originalBorder = inputEl.style.border;
   const originalBoxShadow = inputEl.style.boxShadow;
   inputEl.style.transition = 'box-shadow 0.2s ease';
-  inputEl.style.boxShadow = '0 0 0 2px rgba(102, 126, 234, 0.4)';
+  inputEl.style.boxShadow = '0 0 0 2px rgba(30, 42, 58, 0.3)';
 
   // Show a small toast
-  showNotification('Offlyn AI', `Applying "${action}"...`, 'info', 3000);
+  showNotification('Offlyn Apply', `Applying "${action}"...`, 'info', 3000);
 
   try {
     const { transformText } = await import('./shared/text-transform-service');
@@ -3224,13 +3420,13 @@ browser.runtime.onMessage.addListener((message: unknown) => {
  * Initialize content script
  */
 async function init(): Promise<void> {
-  // Initialize learning system
+  // Initialize RL learning system
   try {
-    await learningSystem.initialize();
-    const stats = learningSystem.getStats();
-    info(`[Learning] System initialized: ${stats.totalCorrections} corrections, ${stats.learnedPatterns} patterns`);
+    await rlSystem.initialize();
+    const stats = rlSystem.getStats();
+    info(`[RL] System initialized: ${stats.totalCorrections} corrections, ${stats.totalPatterns} patterns (${stats.highConfidence} high-confidence)`);
   } catch (err) {
-    warn('[Learning] Failed to initialize:', err);
+    warn('[RL] Failed to initialize:', err);
   }
   
   // Setup user edit tracking first
@@ -3239,7 +3435,7 @@ async function init(): Promise<void> {
   // Wait for DOM to be ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-      console.log('[Offlyn] DOM loaded, starting detection...');
+      console.log('[OA] DOM loaded, starting detection...');
       // Initial detection
       setTimeout(detectPage, 100);
       
@@ -3250,7 +3446,7 @@ async function init(): Promise<void> {
       setTimeout(detectPage, 5000);  // Extra retry for very slow sites
     });
   } else {
-    console.log('[Offlyn] DOM already ready, starting detection...');
+    console.log('[OA] DOM already ready, starting detection...');
     // Initial detection
     setTimeout(detectPage, 100);
     
@@ -3263,7 +3459,7 @@ async function init(): Promise<void> {
   
   // Add global function for manual triggering
   (window as any).offlyn_detectPage = detectPage;
-  console.log('[Offlyn] Manual trigger available: window.offlyn_detectPage()');
+  console.log('[OA] Manual trigger available: window.offlyn_detectPage()');
   
   // Listen for form submissions
   document.addEventListener('submit', (e) => {

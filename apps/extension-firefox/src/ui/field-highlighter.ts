@@ -181,7 +181,7 @@ export function showFieldLabel(selector: string, text: string, duration: number 
     const label = document.createElement('div');
     label.style.cssText = `
       position: absolute;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #1e2a3a 0%, #7cb342 100%);
       color: white;
       padding: 4px 8px;
       border-radius: 4px;

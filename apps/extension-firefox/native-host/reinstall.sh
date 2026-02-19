@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "======================================"
-echo "Offlyn Native Host Installer"
+echo "Offlyn Apply Native Host Installer"
 echo "======================================"
 echo ""
 
@@ -14,7 +14,7 @@ if [ -z "$1" ]; then
   echo "To find your extension ID:"
   echo "1. Open Firefox"
   echo "2. Go to: about:debugging#/runtime/this-firefox"
-  echo "3. Find 'Offlyn Firefox Extension'"
+  echo "3. Find 'Offlyn Apply' extension"
   echo "4. Copy the Internal UUID (looks like: {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx})"
   echo ""
   echo "Then run:"
@@ -43,7 +43,7 @@ mkdir -p "$MANIFEST_DIR"
 cat > "$MANIFEST_FILE" << EOF
 {
   "name": "ai.offlyn.desktop",
-  "description": "Offlyn desktop bridge (Ollama) for job application form filling",
+  "description": "Offlyn Apply desktop bridge (Ollama) for job application form filling",
   "type": "stdio",
   "path": "$LAUNCHER_PATH",
   "allowed_extensions": [
@@ -63,7 +63,7 @@ echo "======================================"
 echo ""
 echo "Next steps:"
 echo "1. Go to Firefox: about:debugging"
-echo "2. Click 'Reload' on the Offlyn extension"
+echo "2. Click 'Reload' on the Offlyn Apply extension"
 echo "3. Open the extension popup - should show 'Native Host Connected'"
 echo "4. Try the onboarding page again"
 echo ""

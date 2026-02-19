@@ -8,7 +8,7 @@ import type { UserProfile } from './profile';
 import { getBestAnswerForContext, getAllVariations, detectFieldType } from './context-aware-storage';
 import { inferFieldValue } from './ollama-service';
 import { validateFieldData } from './field-data-validator';
-import { learningSystem } from './learning-system';
+import { rlSystem } from './learning-rl';
 
 export interface FieldSuggestion {
   selector: string;
@@ -53,17 +53,11 @@ export async function generateFieldSuggestions(
     field.type || ''
   );
   
-  // 0. Check learning system (highest priority)
-  //    Checks: submitted form values > learned patterns > semantic corrections
+  // 0. Check RL learning system (highest priority, in-memory lookup)
   try {
-    const learned = await learningSystem.suggestValue(
-      field,
-      '', // No proposed value yet
-      { url: context.url, company: context.company }
-    );
-    
-    const learnedStr = learned?.suggestedValue != null ? String(learned.suggestedValue).trim() : '';
-    if (learned && learned.confidence > 0.5 && learnedStr !== '') {
+    const learned = rlSystem.getLearnedValue(field);
+    const learnedStr = learned?.value?.trim() ?? '';
+    if (learned && learnedStr !== '') {
       // Validate before adding
       const validation = validateFieldData(field, learnedStr, fieldType);
       if (validation.isValid) {
@@ -72,10 +66,10 @@ export async function generateFieldSuggestions(
           value: learnedStr,
           source: 'learned',
           confidence: Math.min(0.95, learned.confidence + 0.1), // Boost: user explicitly corrected
-          reasoning: learned.reason,
+          reasoning: `Learned from ${learned.patternId ? 'user corrections' : 'past submissions'}`,
           isPrimary: true
         });
-        console.log(`[Suggestions] Added learned value for "${fieldLabel}": "${learnedStr}" (confidence: ${learned.confidence.toFixed(2)})`);
+        console.log(`[Suggestions] Added RL learned value for "${fieldLabel}": "${learnedStr}" (confidence: ${learned.confidence.toFixed(2)})`);
       }
     }
   } catch (err) {

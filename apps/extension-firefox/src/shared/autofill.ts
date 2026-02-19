@@ -4,48 +4,74 @@
 
 import type { FieldSchema, FillMapping } from './types';
 import type { UserProfile } from './profile';
+import { isPhoneDetails, isLocationDetails } from './profile';
 import { getCountryCode, getPhoneNumber, parsePhoneNumber } from './phone-parser';
 import { validateFieldData } from './field-data-validator';
-import { learningSystem } from './learning-system';
+import { rlSystem } from './learning-rl';
 
 /**
  * Generate fill mappings from profile and form schema
  */
 export function generateFillMappings(schema: FieldSchema[], profile: UserProfile): FillMapping[] {
   const mappings: FillMapping[] = [];
-  
+
+  let skippedNoMatch = 0;
+  let skippedEmpty = 0;
+  let skippedValidation = 0;
+  let fromLearned = 0;
+  let fromProfile = 0;
+
+  console.log(`[Autofill] ═══ Generating fill mappings for ${schema.length} field(s) ═══`);
+
   for (const field of schema) {
+    const fieldName = field.label || field.name || field.id || field.selector;
+    console.log(`[Autofill] ─ Field: "${fieldName}" | type: ${field.type || 'text'}`);
+
+    // Skip reCAPTCHA fields — never autofill these
+    const _fieldNameLC = (field.name || '').toLowerCase();
+    const _fieldIdLC = (field.id || '').toLowerCase();
+    if (_fieldNameLC.includes('recaptcha') || _fieldIdLC.includes('recaptcha') ||
+        (field.label || '').toLowerCase().includes('recaptcha')) {
+      console.log(`[Autofill] Skipping reCAPTCHA field: "${fieldName}"`);
+      skippedNoMatch++;
+      continue;
+    }
+
     // PRIORITY 1: Check for learned corrections FIRST (highest priority)
-    const learnedValue = learningSystem.getLearnedValue(field);
+    const learnedValue = rlSystem.getLearnedValue(field);
     let value: any;
     let source: string;
-    
+
     if (learnedValue && learnedValue.confidence >= 0.6) {
       // Use learned value (user has corrected this field before)
       value = learnedValue.value;
       source = 'learned';
-      
+
       // CRITICAL: Validate learned value makes sense for this field type
       const learnedValueStr = String(value).toLowerCase().trim();
       const fieldLabelLower = (field.label || '').toLowerCase();
       const isUrl = learnedValueStr.startsWith('http') || learnedValueStr.includes('linkedin.com') || learnedValueStr.includes('github.com');
-      const isSelfIdField = fieldLabelLower.includes('gender') || 
-                           fieldLabelLower.includes('race') || 
-                           fieldLabelLower.includes('veteran') || 
-                           fieldLabelLower.includes('disability') || 
-                           fieldLabelLower.includes('hispanic') || 
+      // Detect file paths (e.g. "C:\fakepath\resume.pdf" from file input RL associations)
+      const isFilePath = learnedValueStr.includes('fakepath') ||
+                        /\.(pdf|docx?|rtf)$/i.test(learnedValueStr) ||
+                        (learnedValueStr.includes('\\') && learnedValueStr.includes('.'));
+      const isSelfIdField = fieldLabelLower.includes('gender') ||
+                           fieldLabelLower.includes('race') ||
+                           fieldLabelLower.includes('veteran') ||
+                           fieldLabelLower.includes('disability') ||
+                           fieldLabelLower.includes('hispanic') ||
                            fieldLabelLower.includes('ethnicity');
-      
-      // Reject learned URL for self-ID/radio/checkbox fields
-      if (isUrl && (field.type === 'radio' || field.type === 'checkbox' || isSelfIdField)) {
-        console.warn(`[Autofill] ⚠️ Rejecting learned value (URL for ${field.type || 'self-ID'} field): "${value}". Falling back to profile.`);
+
+      // Reject learned URL or file path for self-ID/radio/checkbox fields
+      if ((isUrl || isFilePath) && (field.type === 'radio' || field.type === 'checkbox' || isSelfIdField)) {
+        console.warn(`[Autofill] Rejecting learned value (URL for ${field.type || 'self-ID'} field): "${value}". Falling back to profile.`);
         value = matchFieldToProfile(field, profile);
         source = 'profile';
       }
       // Reject learned short strings for URL fields
-      else if ((fieldLabelLower.includes('linkedin') || fieldLabelLower.includes('github') || fieldLabelLower.includes('website') || fieldLabelLower.includes('portfolio')) && 
+      else if ((fieldLabelLower.includes('linkedin') || fieldLabelLower.includes('github') || fieldLabelLower.includes('website') || fieldLabelLower.includes('portfolio')) &&
                !isUrl && learnedValueStr.length < 10) {
-        console.warn(`[Autofill] ⚠️ Rejecting learned value (non-URL for URL field): "${value}". Falling back to profile.`);
+        console.warn(`[Autofill] Rejecting learned value (non-URL for URL field): "${value}". Falling back to profile.`);
         value = matchFieldToProfile(field, profile);
         source = 'profile';
       }
@@ -56,56 +82,62 @@ export function generateFillMappings(schema: FieldSchema[], profile: UserProfile
           const valueLower = String(value).toLowerCase().trim();
           if (valueLower === 'yes' || valueLower === 'no') {
             value = valueLower.charAt(0).toUpperCase() + valueLower.slice(1);
-            console.log(`[Autofill] 📚 Using learned value (normalized): "${value}" (was: "${learnedValue.value}")`);
-          } else {
-            console.log(`[Autofill] 📚 Using learned value for "${field.label || field.selector}": "${value}" (confidence: ${learnedValue.confidence.toFixed(2)})`);
           }
-        } else {
-          console.log(`[Autofill] 📚 Using learned value for "${field.label || field.selector}": "${value}" (confidence: ${learnedValue.confidence.toFixed(2)})`);
         }
+        console.log(`[Autofill]   source: learned (confidence: ${learnedValue.confidence.toFixed(2)}), value: "${value}"`);
       }
     } else {
       // PRIORITY 2: Fall back to profile matching
       value = matchFieldToProfile(field, profile);
       source = 'profile';
     }
-    
-    if (value !== null) {
-      // Skip empty values - don't mark them as "filled"
-      const valueStr = String(value).trim();
-      if (valueStr === '') {
-        console.log(`[Autofill] Skipping field "${field.label || field.selector}" - empty value`);
-        continue;
-      }
-      
-      // Validate the value before adding to mappings
-      const validation = validateFieldData(field, value);
-      
-      if (validation.isValid) {
-      mappings.push({
-        selector: field.selector,
-        value,
-        });
-      } else {
-        console.warn(
-          `[Autofill] Skipping field "${field.label || field.selector}" - validation failed: ${validation.reason}`
-        );
-        
-        // If there's a suggested fix, try using that
-        if (validation.suggestedFix) {
-          const retryValidation = validateFieldData(field, validation.suggestedFix);
-          if (retryValidation.isValid) {
-            console.log(`[Autofill] Using suggested fix for "${field.label}": ${validation.suggestedFix}`);
-            mappings.push({
-              selector: field.selector,
-              value: validation.suggestedFix,
-            });
-          }
+
+    if (value === null || value === undefined) {
+      skippedNoMatch++;
+      console.log(`[Autofill]   SKIP — no profile match for "${fieldName}"`);
+      continue;
+    }
+
+    // Skip empty values
+    const valueStr = String(value).trim();
+    if (valueStr === '') {
+      skippedEmpty++;
+      console.log(`[Autofill]   SKIP — empty value for "${fieldName}"`);
+      continue;
+    }
+
+    if (source === 'profile') {
+      console.log(`[Autofill]   source: profile, value: "${valueStr.substring(0, 80)}"`);
+    }
+
+    // Validate the value before adding to mappings
+    const validation = validateFieldData(field, value);
+
+    if (validation.isValid) {
+      mappings.push({ selector: field.selector, value });
+      if (source === 'learned') fromLearned++; else fromProfile++;
+      console.log(`[Autofill]   FILL`);
+    } else {
+      // Try suggested fix first
+      if (validation.suggestedFix) {
+        const retryValidation = validateFieldData(field, validation.suggestedFix);
+        if (retryValidation.isValid) {
+          mappings.push({ selector: field.selector, value: validation.suggestedFix });
+          if (source === 'learned') fromLearned++; else fromProfile++;
+          console.log(`[Autofill]   FILL (with fix: "${validation.suggestedFix}" — was: "${valueStr}")`);
+          continue;
         }
       }
+      skippedValidation++;
+      console.warn(`[Autofill]   SKIP — validation failed for "${fieldName}": ${validation.reason}`);
     }
   }
-  
+
+  console.log(`[Autofill] ═══ Summary: ${mappings.length}/${schema.length} fields will fill`);
+  console.log(`[Autofill]   From profile: ${fromProfile} | From learned: ${fromLearned}`);
+  console.log(`[Autofill]   Skipped — no match: ${skippedNoMatch} | empty: ${skippedEmpty} | validation: ${skippedValidation}`);
+  console.log(`[Autofill] ══════════════════════════════`);
+
   return mappings;
 }
 
@@ -217,7 +249,8 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
   // Phone - Country Code (separate field)
   // Check for explicit phone country code patterns OR "Country" field adjacent to phone
   if (matchesAny([label, name, id], ['country code', 'countrycode', 'country_code', 'phone_country', 'phonecountry', 'dialcode', 'dial code', 'dial_code', 'phone code', 'select country'])) {
-    const code = getCountryCode(profile.personal.phone);
+    const phoneData = profile.personal.phone;
+    const code = isPhoneDetails(phoneData) ? phoneData.countryCode : getCountryCode(phoneData as string);
     
     // Check if this is a custom dropdown (type=text but has options)
     // Some fields expect full format: "United States (+1)"
@@ -264,7 +297,8 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
       
       if (looksLikeCountryCodes) {
         // This is actually phone_country_code
-        const code = getCountryCode(profile.personal.phone);
+        const phoneData2 = profile.personal.phone;
+        const code = isPhoneDetails(phoneData2) ? phoneData2.countryCode : getCountryCode(phoneData2 as string);
         console.log('[Autofill] 📞 Country field is phone_country_code:', code);
         return code;
       }
@@ -277,7 +311,8 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
         const hasPhoneField = !!container.querySelector('[name*="phone"], [id*="phone"], [type="tel"], [placeholder*="phone"]');
         if (hasPhoneField) {
           // This is phone_country_code
-          const code = getCountryCode(profile.personal.phone);
+          const phoneData3 = profile.personal.phone;
+          const code = isPhoneDetails(phoneData3) ? phoneData3.countryCode : getCountryCode(phoneData3 as string);
           console.log('[Autofill] 📞 Country field adjacent to phone, treating as country code:', code);
           return code;
         }
@@ -359,12 +394,19 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
     
     if (suggestsSplit) {
       // Return just the phone number without country code
-      const localNumber = getPhoneNumber(profile.personal.phone);
+      const phoneData4 = profile.personal.phone;
+      const localNumber = isPhoneDetails(phoneData4) ? phoneData4.number : getPhoneNumber(phoneData4 as string);
       console.log('[Autofill] 📞 Returning local number:', localNumber);
       return localNumber;
     } else {
       // Return full phone number with country code
-      const parsed = parsePhoneNumber(profile.personal.phone);
+      const phoneData5 = profile.personal.phone;
+      if (isPhoneDetails(phoneData5)) {
+        const fullNumber = `${phoneData5.countryCode} ${phoneData5.number}`;
+        console.log('[Autofill] 📞 Returning full number:', fullNumber);
+        return fullNumber;
+      }
+      const parsed = parsePhoneNumber(phoneData5 as string);
       console.log('[Autofill] 📞 Returning full number:', parsed.fullNumber);
       return parsed.fullNumber;
     }
@@ -389,7 +431,8 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
     if (looksLikeCountryCodes) {
       console.log('[Autofill] Detected country code dropdown, extracting code from phone');
       // This is a phone country code dropdown
-      const countryCode = getCountryCode(profile.personal.phone);
+      const phoneData6 = profile.personal.phone;
+      const countryCode = isPhoneDetails(phoneData6) ? phoneData6.countryCode : getCountryCode(phoneData6 as string);
       
       // Find matching option
       const match = options.find((opt: string) => opt.includes(countryCode));
@@ -430,6 +473,11 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
     if (!labelLower.includes('hispanic') && !labelLower.includes('latino')) {
       // Don't match - might be part of another field name
       skipHispanicLatino = true;
+    } else if (labelLower.includes('not hispanic') || labelLower.includes('not latino') ||
+               labelLower.includes('non-hispanic')) {
+      // "White (Not Hispanic or Latino)", "Black (Not Hispanic or Latino)", etc. are RACE options,
+      // not Hispanic/Latino Yes-No questions — let the race handler process them instead.
+      skipHispanicLatino = true;
     } else {
       // CRITICAL: Check if this is actually a RACE field with multiple options (Ashby style)
       // On Ashby, "Hispanic or Latino" is ONE option in a race radio group, not a separate Yes/No
@@ -461,7 +509,11 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
       console.log('[Autofill] 🏁 Hispanic/Latino field detected (PRIORITY MATCH) - simple Yes/No');
     
     // Check if user's ethnicity data includes Hispanic/Latino
-    const isHispanic = profile.selfId.race.some(r => 
+    // Prefer the dedicated ethnicity field, fall back to race array for backwards compat
+    const isHispanic = (profile.selfId.ethnicity
+      ? profile.selfId.ethnicity.toLowerCase().includes('hispanic') || profile.selfId.ethnicity.toLowerCase().includes('latino')
+      : false
+    ) || profile.selfId.race.some(r => 
       r.toLowerCase().includes('hispanic') || r.toLowerCase().includes('latino')
     );
     
@@ -709,6 +761,27 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
       return null;
     }
     
+    // For individual radio buttons without grouped radioOptions (e.g. Ashby single radios)
+    if (field.type === 'radio') {
+      const optLower = (field.label || '').toLowerCase().trim();
+      const veteranLower = profile.selfId.veteran.toLowerCase();
+      const isVet = veteranLower.includes('yes') || veteranLower.includes('i identify') ||
+                    (veteranLower.includes('protected veteran') && !veteranLower.includes('not'));
+      const isDeclineVet = veteranLower.includes('decline');
+
+      if (isVet) {
+        if (optLower.includes('yes') || optLower.includes('i identify') ||
+            (optLower.includes('protected veteran') && !optLower.includes('not'))) return true;
+      } else if (isDeclineVet) {
+        if (optLower.includes('decline')) return true;
+      } else {
+        // Default: not a protected veteran
+        if (optLower.includes('not a protected veteran') || optLower.includes('i am not') ||
+            (optLower.includes('not') && optLower.includes('veteran'))) return true;
+      }
+      return null; // This option doesn't match — skip it
+    }
+
     // For checkbox (old logic)
     if (field.type === 'checkbox') {
       const fieldValue = field.valuePreview || '';
@@ -868,6 +941,25 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
       return null;
     }
     
+    // For individual radio buttons without grouped radioOptions (e.g. Ashby single radios)
+    if (field.type === 'radio') {
+      const optLower = (field.label || '').toLowerCase().trim();
+      const disabilityLower = profile.selfId.disability.toLowerCase();
+      const hasDisability = disabilityLower.includes('yes') || disabilityLower.includes('i have') ||
+                            (disabilityLower.includes('disability') && !disabilityLower.includes('no'));
+      const isDeclineDisability = disabilityLower.includes('decline') || disabilityLower.includes('do not want');
+
+      if (hasDisability && !disabilityLower.includes('no')) {
+        if (optLower.includes('yes') && optLower.includes('disability')) return true;
+      } else if (isDeclineDisability) {
+        if (optLower.includes('decline') || optLower.includes('do not want')) return true;
+      } else {
+        // Default: no disability
+        if ((optLower.includes('no') || optLower.includes("don't")) && optLower.includes('disability')) return true;
+      }
+      return null; // This option doesn't match — skip it
+    }
+
     // For checkbox (old logic)
     if (field.type === 'checkbox') {
       const fieldValue = field.valuePreview || '';
@@ -1029,6 +1121,22 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
       return null;
     }
     
+    // For individual radio buttons without grouped radioOptions (e.g. Ashby single radios)
+    // Compare this radio button's own label against the user's gender choice
+    if (field.type === 'radio') {
+      const optLower = (field.label || '').toLowerCase().trim();
+      const userGender = (profile.selfId.gender[0] || '').toLowerCase().trim();
+      if (!userGender) return null;
+
+      if (isUserMale(userGender) && isOptionMale(optLower)) return true;
+      if (isUserFemale(userGender) && isOptionFemale(optLower)) return true;
+      if (userGender.includes('non-binary') && (optLower.includes('non-binary') || optLower.includes('nonbinary'))) return true;
+      // Generic partial match (e.g. "decline to self-identify" ↔ "decline")
+      if (optLower === userGender || (userGender.length > 4 && optLower.includes(userGender))) return true;
+      // This radio option is NOT the user's gender — skip it
+      return null;
+    }
+
     // For checkboxes (old logic)
     if (field.type === 'checkbox') {
       const fieldValue = field.valuePreview || '';
@@ -1156,7 +1264,11 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
         (labelLower.includes('able') || labelLower.includes('work from') || labelLower.includes('days') || 
          labelLower.includes('times') || labelLower.includes('open to'))) {
       
-      const userLocation = (profile.personal.location || '').toLowerCase();
+      const locData = profile.personal.location;
+      const userLocation = (isLocationDetails(locData)
+        ? `${locData.city} ${locData.state} ${locData.country}`
+        : (locData as string) || ''
+      ).toLowerCase();
       
       // Check if asking about San Francisco office
       if (labelLower.includes('san francisco')) {
@@ -1284,8 +1396,20 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
       }
     }
 
+    // "I am a U.S. person" radio (OFAC/export-control question on some ATS forms)
+    // Maps to legally authorized = true
+    if (field.type === 'radio' &&
+        (label.includes('u.s. person') || label.includes('us person') ||
+         label.includes('united states person'))) {
+      return profile.workAuth.legallyAuthorized ? true : null;
+    }
+
     // Current work status
-    if (matchesAny([label, name, id], ['status', 'citizenship', 'citizen', 'resident', 'permanent'])) {
+    // CRITICAL: Exclude sanctioned-country citizenship labels such as
+    // "I am a citizen of Cuba, Iran, North Korea, or Syria AND I am NOT a U.S. person"
+    if (matchesAny([label, name, id], ['status', 'citizenship', 'citizen', 'resident', 'permanent']) &&
+        !matchesAny([label], ['cuba', 'iran', 'north korea', 'syria', 'sanctions',
+                              'not a u.s', 'citizen of cuba', 'citizen of a different'])) {
       if (profile.workAuth.currentStatus) {
         return profile.workAuth.currentStatus;
       }
@@ -1352,21 +1476,34 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
       }
     }
     
-    // Parse location string (e.g., "Palo Alto, California" or "Palo Alto, CA")
-    const locationValue = profile.personal.location || '';
-    const parts = locationValue.split(',').map(p => p.trim());
-    const city = parts[0] || '';
-    const state = parts[1] || '';
-    
-    // Match specific address components (Workday-style forms)
+    // Resolve city / state / country / zip from profile (supports both object and legacy string)
+    const locationData = profile.personal.location;
+    let city    = '';
+    let state   = '';
+    let country = 'United States';
+    let zipCode = '';
+
+    if (isLocationDetails(locationData)) {
+      // New structured format — direct access, no parsing needed
+      city    = locationData.city    || '';
+      state   = locationData.state   || '';
+      country = locationData.country || 'United States';
+      zipCode = locationData.zipCode || '';
+    } else if (typeof locationData === 'string' && locationData) {
+      // Legacy string: "City, State" or "City, State, Country"
+      const parts = locationData.split(',').map(p => p.trim());
+      city  = parts[0] || '';
+      state = parts[1] || '';
+      if (parts[2]) country = parts[2];
+    }
+
     // City
     if (labelLower.includes('city') || labelLower === 'city*') {
       console.log('[Autofill] 📍 City field:', city);
       return city;
     }
     
-    // State / Region
-    // Exclude labels that mention "state" in a work-auth context (e.g. "United States")
+    // State / Region / Province
     if ((labelLower.includes('state') || labelLower.includes('region') || labelLower.includes('province')) &&
         !labelLower.includes('authorized') && !labelLower.includes('legally') && 
         !labelLower.includes('sponsorship') && !labelLower.includes('united states') &&
@@ -1377,14 +1514,16 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
     
     // Postal Code / ZIP
     if (labelLower.includes('postal') || labelLower.includes('zip')) {
-      // TODO: Add postal code to profile
-      console.log('[Autofill] 📍 Postal code field - skipping (no profile data)');
-      return null; // Skip for now, needs profile data
+      if (zipCode) {
+        console.log('[Autofill] 📍 ZIP/Postal code field:', zipCode);
+        return zipCode;
+      }
+      console.log('[Autofill] 📍 Postal code field - no data in profile');
+      return null;
     }
     
     // County
     if (labelLower.includes('county')) {
-      // Map common cities to counties (US-focused for now)
       const countyMap: Record<string, string> = {
         'palo alto': 'Santa Clara',
         'san francisco': 'San Francisco',
@@ -1404,29 +1543,26 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
     
     // Address Line 1 (street address)
     if (labelLower.includes('address line 1') || labelLower.includes('street address')) {
-      // TODO: Add street address to profile
       console.log('[Autofill] 📍 Address Line 1 - skipping (no profile data)');
-      return null; // Skip for now, needs profile data
+      return null;
     }
     
     // Address Line 2 (apt/suite)
     if (labelLower.includes('address line 2') || labelLower.includes('apt') || labelLower.includes('suite')) {
       console.log('[Autofill] 📍 Address Line 2 - skipping (optional)');
-      return null; // Usually optional
+      return null;
     }
     
-    // Generic location/address field - return full location string
+    // Generic location/address field — return a readable string
+    const locationString = typeof locationData === 'string'
+      ? locationData.replace(/\s*,\s*/g, ', ').trim()
+      : [city, state, country].filter(Boolean).join(', ');
+
     console.log('[Autofill] 📍 Generic location field matched:', {
       fieldLabel: field.label,
-      returnValue: locationValue
+      returnValue: locationString,
     });
-    
-    // Clean up location value: trim whitespace, normalize commas
-    const cleanedLocation = locationValue
-      .replace(/\s*,\s*/g, ', ')  // Normalize comma spacing
-      .trim();
-    
-    return cleanedLocation;
+    return locationString;
   }
   
   // LinkedIn
