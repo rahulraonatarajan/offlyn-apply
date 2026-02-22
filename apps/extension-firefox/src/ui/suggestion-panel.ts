@@ -6,6 +6,7 @@
  */
 
 import type { FieldSuggestion, SuggestionOption } from '../shared/suggestion-service';
+import { setHTML } from '../shared/html';
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ function render(): void {
   // Build HTML
   const enabledCount = [...state.enabled.values()].filter(Boolean).length;
 
-  panel.innerHTML = `
+  setHTML(panel, `
     <div class="osp-header">
       <div class="osp-header-left">
         <span class="osp-logo">O</span>
@@ -109,7 +110,7 @@ function render(): void {
       <button class="osp-btn osp-btn-cancel">Cancel</button>
       <button class="osp-btn osp-btn-apply">Apply ${enabledCount} Suggestion${enabledCount !== 1 ? 's' : ''}</button>
     </div>
-  `;
+  `);
 
   document.body.appendChild(panel);
   panelEl = panel;
@@ -314,7 +315,7 @@ function highlightFieldSuccess(selector: string): void {
 function createAppliedTag(): HTMLElement {
   const tag = document.createElement('span');
   tag.className = 'osp-applied-tag';
-  tag.innerHTML = '&#10003; Applied';
+  tag.textContent = '✓ Applied';
   return tag;
 }
 

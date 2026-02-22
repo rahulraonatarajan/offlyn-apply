@@ -56,6 +56,7 @@ export function generateFillMappings(schema: FieldSchema[], profile: UserProfile
                         /\.(pdf|docx?|rtf)$/i.test(learnedValueStr) ||
                         (learnedValueStr.includes('\\') && learnedValueStr.includes('.'));
       const isSelfIdField = fieldLabelLower.includes('gender') ||
+                           fieldLabelLower.includes('sex') ||
                            fieldLabelLower.includes('race') ||
                            fieldLabelLower.includes('veteran') ||
                            fieldLabelLower.includes('disability') ||
@@ -74,6 +75,32 @@ export function generateFillMappings(schema: FieldSchema[], profile: UserProfile
         console.warn(`[Autofill] Rejecting learned value (non-URL for URL field): "${value}". Falling back to profile.`);
         value = matchFieldToProfile(field, profile);
         source = 'profile';
+      }
+      // Reject learned full name for first-name-only or last-name-only fields.
+      // The RL system can record a full name (e.g. "Nishanth Ponukumatla") as the
+      // "correct" answer for a First Name field if the user submitted the form with
+      // a full name there. This guard prevents that stale pattern from being reused.
+      else if (
+        /\bfirst\s*name\b/i.test(fieldLabelLower) &&
+        String(value).trim().includes(' ')
+      ) {
+        const profileFirst = profile.personal?.firstName;
+        if (profileFirst) {
+          console.warn(`[Autofill] Rejecting learned full name for first-name field: "${value}". Using profile firstName.`);
+          value = profileFirst;
+          source = 'profile';
+        }
+      }
+      else if (
+        /\blast\s*name\b/i.test(fieldLabelLower) &&
+        String(value).trim().includes(' ')
+      ) {
+        const profileLast = profile.personal?.lastName;
+        if (profileLast) {
+          console.warn(`[Autofill] Rejecting learned full name for last-name field: "${value}". Using profile lastName.`);
+          value = profileLast;
+          source = 'profile';
+        }
       }
       // If valid, normalize and use
       else {
@@ -559,6 +586,39 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
   const nameLower = (name || '').toLowerCase();
   const idLower = (id || '').toLowerCase();
   
+  // Ethnicity-only fields (labeled "ethnicity" but NOT "race") are typically asking the
+  // Hispanic/Latino question rather than asking for race categories. Handle them separately
+  // so we don't accidentally fill them with the user's race value (e.g. "Asian").
+  if ((labelLower.includes('ethnicity') || labelLower.includes('ethnic')) && !labelLower.includes('race')) {
+    const isHispanic = (profile.selfId.ethnicity
+      ? (profile.selfId.ethnicity.toLowerCase().includes('hispanic') || profile.selfId.ethnicity.toLowerCase().includes('latino'))
+      : false
+    ) || profile.selfId.race.some(r => r.toLowerCase().includes('hispanic') || r.toLowerCase().includes('latino'));
+
+    // If options are available, find the right one by inspecting their text
+    if ('options' in field && Array.isArray((field as any).options)) {
+      const opts = (field as any).options as string[];
+      const hasHispanicOptions = opts.some(o => o.toLowerCase().includes('hispanic') || o.toLowerCase().includes('latino'));
+
+      if (hasHispanicOptions) {
+        // This is a Hispanic/Latino Yes-No style field
+        const match = isHispanic
+          ? opts.find(o => { const l = o.toLowerCase(); return (l.includes('hispanic') || l.includes('latino')) && !l.includes('not'); })
+          : opts.find(o => { const l = o.toLowerCase(); return l.includes('not hispanic') || l.includes('not latino') || l.includes('decline') || l === 'no'; });
+        const fallback = isHispanic ? 'Hispanic or Latino' : 'Not Hispanic or Latino';
+        const result = match || fallback;
+        console.log('[Autofill] 🏁 Ethnicity field (Hispanic/Latino):', result);
+        return result;
+      }
+      // Options don't look like Hispanic/Latino → fall through to race handler below
+    } else {
+      // No options pre-loaded — default to Hispanic/Latino answer
+      const result = isHispanic ? 'Hispanic or Latino' : 'Not Hispanic or Latino';
+      console.log('[Autofill] 🏁 Ethnicity field (Hispanic/Latino, no options):', result);
+      return result;
+    }
+  }
+
   let isRaceField = matchesAny([label, name, id], ['race', 'ethnicity', 'ethnic']);
   
   // Additional check: If this is a radio group with multiple race options (Ashby style)
@@ -803,11 +863,16 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
       let searchValue = valueLower;
       if (valueLower.includes('not') && valueLower.includes('veteran')) {
         // "Not a veteran" -> look for "I am not a protected veteran", "No", etc.
+        // IMPORTANT: exclude "I am a veteran and I do NOT belong to a classification of
+        // protected veterans" — that's someone who IS a veteran (just not "protected").
         const noOption = options.find((opt: string) => {
           const optLower = opt.toLowerCase();
-          return optLower === 'no' || 
-                 (optLower.includes('not') && optLower.includes('veteran')) ||
-                 optLower.includes('decline');
+          const isActuallyVeteranOption = optLower.startsWith('i am a veteran');
+          return !isActuallyVeteranOption && (
+            optLower === 'no' || 
+            (optLower.includes('not') && optLower.includes('veteran')) ||
+            optLower.includes('decline')
+          );
         });
         if (noOption) {
           console.log('[Autofill] ✅ Mapped "Not a veteran" to:', noOption);
@@ -977,8 +1042,25 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
       const value = profile.selfId.disability;
       const valueLower = value.toLowerCase();
       
-      // Handle common disability status variations
-      if (valueLower === 'no' || valueLower.includes('no disability') || valueLower.includes('not disabled')) {
+      // Handle common disability status variations.
+      // IMPORTANT: "No, I don't have a disability" contains the substring "have a disability"
+      // so we must check for negation FIRST before checking affirmative phrases.
+      const hasNoDisability =
+        valueLower === 'no' ||
+        valueLower.includes('no disability') ||
+        valueLower.includes('not disabled') ||
+        (valueLower.includes("don't") && valueLower.includes('disabilit')) ||
+        (valueLower.includes('do not') && valueLower.includes('disabilit')) ||
+        (valueLower.startsWith('no') && valueLower.includes('disabilit'));
+
+      const hasYesDisability =
+        !hasNoDisability && (
+          valueLower === 'yes' ||
+          (valueLower.includes('have a disability') && !valueLower.includes("don't") && !valueLower.includes('not')) ||
+          (valueLower.includes('disabled') && !valueLower.includes('not disabled'))
+        );
+
+      if (hasNoDisability) {
         // "No" -> look for "I do not have a disability", "No", etc.
         const noOption = options.find((opt: string) => {
           const optLower = opt.toLowerCase();
@@ -991,7 +1073,7 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
           console.log('[Autofill] ✅ Mapped "No disability" to:', noOption);
           return noOption;
         }
-      } else if (valueLower === 'yes' || valueLower.includes('have a disability') || valueLower.includes('disabled')) {
+      } else if (hasYesDisability) {
         // "Yes" -> look for "I have a disability", "Yes", etc.
         const yesOption = options.find((opt: string) => {
           const optLower = opt.toLowerCase();
@@ -1060,12 +1142,17 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
   }
   
   // Gender (early check to avoid conflicts)
-  if (matchesAny([label, name, id], ['gender'])) {
+  if (matchesAny([label, name, id], ['gender', 'sex'])) {
     const labelLower = (label || '').toLowerCase();
     
-    // Exclude transgender-specific questions
+    // Exclude transgender-specific questions and unrelated fields containing "sex"
+    // (e.g. "Please do not have sex with clients" type warnings — very unlikely but guard anyway)
     if (labelLower.includes('transgender') || labelLower.includes('trans')) {
       return null; // Handle separately
+    }
+    // "sex" in isolation or "identify your sex" → gender handler; exclude "sexual orientation"
+    if (labelLower.includes('sex') && labelLower.includes('orientation')) {
+      return null; // Orientation handled separately
     }
     
     // Gender synonym groups: forms may say "Male" or "Man", "Female" or "Woman"

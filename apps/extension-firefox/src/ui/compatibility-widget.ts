@@ -9,6 +9,8 @@
  *  - All layout uses inline styles to be immune to host-page CSS.
  */
 
+import { setHTML, appendHTML } from '../shared/html';
+
 import type { UserProfile } from '../shared/profile';
 import type { FieldSchema }  from '../shared/types';
 
@@ -290,7 +292,7 @@ function buildPanel(sr: ShadowRoot, data: CompatData): HTMLElement {
     justifyContent:  'center',
     flexShrink:      '0',
   });
-  closeBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="1" y1="1" x2="10" y2="10"/><line x1="10" y1="1" x2="1" y2="10"/></svg>`;
+  setHTML(closeBtn, `<svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="1" y1="1" x2="10" y2="10"/><line x1="10" y1="1" x2="1" y2="10"/></svg>`);
   closeBtn.addEventListener('click', () => {
     panelOpen = false;
     panel.style.display = 'none';
@@ -447,7 +449,7 @@ function buildCompatToggle(data: CompatData): { row: HTMLElement; arrow: HTMLEle
     transition: 'transform 0.2s',
     flexShrink: '0',
   });
-  arrow.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 5 7 9 11 5"/></svg>`;
+  setHTML(arrow, `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 5 7 9 11 5"/></svg>`);
 
   row.appendChild(left);
   row.appendChild(arrow);
@@ -574,8 +576,8 @@ function buildSimpleRow(
   const right = el('div');
   setStyles(right, { display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '4px', flexShrink: '0' });
   right.appendChild(txt2(`${score}%`, { fontSize: '13px', fontWeight: '600', color: scoreColor(score), whiteSpace: 'nowrap' }));
-  if (indicator === 'check') right.innerHTML += `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round"><polyline points="2 7 5.5 10.5 12 3.5"/></svg>`;
-  if (indicator === 'warn')  right.innerHTML += `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="5.5"/><line x1="7" y1="4.5" x2="7" y2="7.5"/><circle cx="7" cy="9.5" r="0.6" fill="#d97706"/></svg>`;
+  if (indicator === 'check') appendHTML(right, `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round"><polyline points="2 7 5.5 10.5 12 3.5"/></svg>`);
+  if (indicator === 'warn')  appendHTML(right, `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="5.5"/><line x1="7" y1="4.5" x2="7" y2="7.5"/><circle cx="7" cy="9.5" r="0.6" fill="#d97706"/></svg>`);
 
   row.appendChild(left);
   row.appendChild(right);
@@ -597,13 +599,13 @@ function buildAICard(html: string): HTMLElement {
   setStyles(head, { display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px' });
   const sparkBox = el('div');
   setStyles(sparkBox, { width: '28px', height: '28px', borderRadius: '8px', background: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' });
-  sparkBox.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>`;
+  setHTML(sparkBox, `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>`);
   head.appendChild(sparkBox);
   head.appendChild(txt2('AI Recommendation', { fontSize: '12px', fontWeight: '600', color: '#1e293b' }));
   card.appendChild(head);
   const p = el('p');
   setStyles(p, { fontSize: '11px', color: '#475569', lineHeight: '1.6', margin: '0' });
-  p.innerHTML = html;
+  setHTML(p, html);
   card.appendChild(p);
   return card;
 }
@@ -673,21 +675,21 @@ function dividerEl(): HTMLElement {
 function ibox(bg: string, svgHtml: string): HTMLElement {
   const box = el('div');
   setStyles(box, { width: '30px', height: '30px', borderRadius: '8px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' });
-  box.innerHTML = svgHtml;
+  setHTML(box, svgHtml);
   return box;
 }
 
 function badgeEl(label: string, bg: string, color: string, svgHtml: string): HTMLElement {
   const b = el('span');
   setStyles(b, { display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: '3px', padding: '3px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '500', background: bg, color, whiteSpace: 'nowrap' });
-  b.innerHTML = svgHtml + escHtml(label);
+  setHTML(b, svgHtml + escHtml(label));
   return b;
 }
 
 function chip(parent: HTMLElement, html: string, bg: string, color: string): void {
   const c = el('span');
   setStyles(c, { display: 'inline-flex', flexDirection: 'row', alignItems: 'center', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', background: bg, color });
-  c.innerHTML = html;
+  setHTML(c, html);
   parent.appendChild(c);
 }
 

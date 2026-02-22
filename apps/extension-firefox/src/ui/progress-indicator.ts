@@ -3,6 +3,8 @@
  * Brand: navy #1e293b + green #16a34a
  */
 
+import { setHTML } from '../shared/html';
+
 let progressElement: HTMLElement | null = null;
 
 /**
@@ -30,7 +32,7 @@ export function showProgress(total: number): void {
     animation: offlyn-progress-in 0.25s cubic-bezier(0.16,1,0.3,1) forwards;
   `;
 
-  container.innerHTML = `
+  setHTML(container, `
     <div style="display:flex;align-items:flex-start;gap:10px;">
       <div class="offlyn-spinner" style="
         flex-shrink:0;
@@ -60,7 +62,7 @@ export function showProgress(total: number): void {
         ">0 / ${total} fields</div>
       </div>
     </div>
-  `;
+  `);
 
   document.body.appendChild(container);
   progressElement = container;
@@ -107,9 +109,9 @@ export function showProgressComplete(success: boolean, filled: number, total: nu
   if (spinner) {
     spinner.style.animation = 'none';
     spinner.style.border = 'none';
-    spinner.innerHTML = success
+    setHTML(spinner, success
       ? `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#16a34a"/><path d="M5.5 9l2.5 2.5 4.5-4.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-      : `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#f59e0b"/><path d="M9 6v3.5M9 11.5h.01" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+      : `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#f59e0b"/><path d="M9 6v3.5M9 11.5h.01" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>`);
   }
 
   if (title) {

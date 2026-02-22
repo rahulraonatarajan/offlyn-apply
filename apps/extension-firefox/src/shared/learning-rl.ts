@@ -64,6 +64,99 @@ function labelsSimilar(a: string, b: string): boolean {
   return overlap.length / shorter.length >= 0.6;
 }
 
+// ── Semantic value validation ────────────────────────────────────────────────
+
+/**
+ * Validation rules keyed by a field-label pattern.
+ * Each rule returns `true` (value is valid) or `false` (reject it).
+ *
+ * Rules are checked in order; the first matching label wins.
+ */
+type ValidationRule = {
+  /** Substrings that must appear in the normalised label to trigger this rule */
+  labelIncludes: string[];
+  /** Validation predicate — return false to reject the value */
+  validate: (value: string) => boolean;
+  /** Human-readable reason logged when a value is rejected */
+  reason: string;
+};
+
+const FIELD_VALIDATION_RULES: ValidationRule[] = [
+  // ── Name parts: must be a single word (no spaces) ─────────────────────────
+  {
+    labelIncludes: ['first name', 'firstname', 'given name', 'fname'],
+    validate: (v) => !v.includes(' '),
+    reason: 'First-name field must not contain a space (full name rejected)',
+  },
+  {
+    labelIncludes: ['last name', 'lastname', 'surname', 'family name', 'lname'],
+    validate: (v) => !v.includes(' '),
+    reason: 'Last-name field must not contain a space (full name rejected)',
+  },
+  // ── Email: must look like an email address ────────────────────────────────
+  {
+    labelIncludes: ['email', 'e-mail'],
+    validate: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+    reason: 'Email field must contain a valid email address',
+  },
+  // ── Phone: must be phone-like (digits, spaces, +, -, parens) ─────────────
+  {
+    labelIncludes: ['phone', 'mobile', 'tel', 'telephone', 'cell'],
+    validate: (v) => /^[0-9+\-() .ext]+$/i.test(v) && v.replace(/\D/g, '').length >= 7,
+    reason: 'Phone field must contain digits only (no letters)',
+  },
+  // ── LinkedIn: must look like a LinkedIn URL ────────────────────────────────
+  {
+    labelIncludes: ['linkedin'],
+    validate: (v) => v.includes('linkedin.com') || v.startsWith('http'),
+    reason: 'LinkedIn field must be a URL containing linkedin.com',
+  },
+  // ── GitHub: must look like a GitHub URL ──────────────────────────────────
+  {
+    labelIncludes: ['github', 'git hub'],
+    validate: (v) => v.includes('github.com') || v.startsWith('http'),
+    reason: 'GitHub field must be a URL containing github.com',
+  },
+  // ── Generic URL fields ────────────────────────────────────────────────────
+  {
+    labelIncludes: ['website', 'portfolio', 'personal site', 'url'],
+    validate: (v) => v.startsWith('http') || v.startsWith('www.'),
+    reason: 'URL field must start with http or www.',
+  },
+];
+
+/**
+ * Validate a value before storing/using it for a given field label.
+ *
+ * Returns `{ valid: true }` if acceptable, or
+ * `{ valid: false, reason: string }` to reject.
+ */
+function validateValueForField(
+  fieldLabel: string,
+  value: string
+): { valid: true } | { valid: false; reason: string } {
+  const label = fieldLabel.toLowerCase().trim();
+  const trimmed = value.trim();
+
+  // Never store empty values
+  if (!trimmed) {
+    return { valid: false, reason: 'Empty value' };
+  }
+
+  for (const rule of FIELD_VALIDATION_RULES) {
+    // Check if any of the trigger substrings appear in the label
+    if (rule.labelIncludes.some(sub => label.includes(sub))) {
+      if (!rule.validate(trimmed)) {
+        return { valid: false, reason: rule.reason };
+      }
+      // First matching rule passed — no need to check further rules
+      return { valid: true };
+    }
+  }
+
+  return { valid: true };
+}
+
 /**
  * Age-based decay factor. Returns a multiplier close to 1 for recent patterns
  * and approaching 0 for patterns not used in 30+ days.
@@ -132,6 +225,33 @@ export class ReinforcementLearningSystem {
     }
 
     this.ready = true;
+
+    // Remove any patterns that fail validation (e.g. full names stored for
+    // first-name / last-name slots from a previous bug).
+    const purged = this.purgeInvalidPatterns();
+    if (purged > 0) {
+      console.warn(`[RL] Purged ${purged} invalid pattern(s) on load — saving cleaned data`);
+      this.save();
+    }
+  }
+
+  /**
+   * Remove patterns whose stored `learnedValue` fails the field validation
+   * rules.  Returns the number of patterns removed.
+   */
+  private purgeInvalidPatterns(): number {
+    let removed = 0;
+    for (const [key, pattern] of this.patterns.entries()) {
+      const check = validateValueForField(pattern.fieldLabel, pattern.learnedValue);
+      if (!check.valid) {
+        console.warn(
+          `[RL] Removing invalid pattern "${pattern.fieldLabel}" → "${pattern.learnedValue}": ${check.reason}`
+        );
+        this.patterns.delete(key);
+        removed++;
+      }
+    }
+    return removed;
   }
 
   /** Persist current state to browser.storage.local (async, non-blocking). */
@@ -163,7 +283,14 @@ export class ReinforcementLearningSystem {
     const correctedStr = userCorrectedValue.trim();
     if (!correctedStr || autoFilledValue === userCorrectedValue) return;
 
+    // Validate the corrected value before storing it
     const fieldLabel = normalizeLabel(field.label);
+    const check = validateValueForField(fieldLabel, correctedStr);
+    if (!check.valid) {
+      console.warn(`[RL] Rejecting correction for "${fieldLabel}": ${check.reason} (value: "${correctedStr}")`);
+      return;
+    }
+
     const fieldType = field.type || field.tagName;
     const key = patternKey(fieldLabel, fieldType);
     const now = Date.now();
@@ -258,6 +385,13 @@ export class ReinforcementLearningSystem {
     const fieldLabel = normalizeLabel(field.label);
     const fieldType = field.type || field.tagName;
     const now = Date.now();
+
+    // Validate the value before storing it
+    const check = validateValueForField(fieldLabel, value.trim());
+    if (!check.valid) {
+      console.warn(`[RL] Rejecting success for "${fieldLabel}": ${check.reason} (value: "${value.trim()}")`);
+      return;
+    }
 
     let pattern = this.findPattern(fieldLabel, fieldType);
 

@@ -6,6 +6,7 @@
  */
 
 import type { CoverLetterResult } from '../shared/cover-letter-service';
+import { setHTML } from '../shared/html';
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -95,7 +96,7 @@ export function showCoverLetterError(msg: string): void {
   const body = panelEl?.querySelector('.ocl-body-text') as HTMLElement | null;
   if (body) {
     body.innerText = '';
-    body.innerHTML = `<div class="ocl-error">${escHtml(msg)}</div>`;
+    setHTML(body, `<div class="ocl-error">${escHtml(msg)}</div>`);
   }
   panelEl?.querySelector('.ocl-generating')?.classList.add('ocl-hidden');
   panelEl?.querySelector('.ocl-refining')?.classList.add('ocl-hidden');
@@ -121,7 +122,7 @@ function render(): void {
 
   const hasAutoApply = !!state.onAutoApply;
 
-  panel.innerHTML = `
+  setHTML(panel, `
     <div class="ocl-header">
       <button class="ocl-back" title="Back">&#8592;</button>
       <div class="ocl-header-center">
@@ -170,7 +171,7 @@ function render(): void {
         &#8635; Regenerate
       </button>
     </div>
-  `;
+  `);
 
   document.body.appendChild(panel);
   panelEl = panel;
@@ -279,10 +280,10 @@ function resetToGenerating(): void {
 
 function flashButton(btn: HTMLButtonElement | null, text: string): void {
   if (!btn) return;
-  const orig = btn.innerHTML;
+  const origNodes = Array.from(btn.childNodes).map(n => n.cloneNode(true));
   btn.textContent = text;
   btn.disabled = true;
-  setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1500);
+  setTimeout(() => { btn.replaceChildren(...origNodes); btn.disabled = false; }, 1500);
 }
 
 // ── Download ────────────────────────────────────────────────────────────────

@@ -3,6 +3,8 @@
  * Brand: navy #1e293b + green #16a34a
  */
 
+import { setHTML } from '../shared/html';
+
 type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
 interface Notification {
@@ -65,24 +67,28 @@ export function showNotification(
     animation: offlyn-slide-in 0.25s cubic-bezier(0.16,1,0.3,1) forwards;
   `;
 
-  el.innerHTML = `
+  setHTML(el, `
     <div style="display:flex;align-items:flex-start;gap:10px;">
       <div style="flex-shrink:0;margin-top:1px;">${iconSvg}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:600;font-size:13px;color:#1e293b;line-height:1.3;margin-bottom:3px;">${escapeHtml(title)}</div>
         <div style="font-size:12px;color:#64748b;line-height:1.4;">${escapeHtml(message)}</div>
       </div>
-      <button
+      <button class="offlyn-toast-close"
         style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px;line-height:1;padding:0;width:18px;height:18px;flex-shrink:0;border-radius:4px;display:flex;align-items:center;justify-content:center;transition:background 0.15s,color 0.15s;"
-        onmouseover="this.style.background='#f1f5f9';this.style.color='#334155';"
-        onmouseout="this.style.background='none';this.style.color='#94a3b8';"
-        onclick="document.getElementById('${id}')?.remove()"
         title="Dismiss"
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>
       </button>
     </div>
-  `;
+  `);
+
+  const closeBtn = el.querySelector('.offlyn-toast-close') as HTMLButtonElement | null;
+  if (closeBtn) {
+    closeBtn.addEventListener('mouseover', () => { closeBtn.style.background = '#f1f5f9'; closeBtn.style.color = '#334155'; });
+    closeBtn.addEventListener('mouseout', () => { closeBtn.style.background = 'none'; closeBtn.style.color = '#94a3b8'; });
+    closeBtn.addEventListener('click', () => removeNotification(id));
+  }
 
   container.appendChild(el);
   activeNotifications.set(id, el);

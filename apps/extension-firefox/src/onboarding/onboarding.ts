@@ -7,6 +7,7 @@ import { saveUserProfile, isPhoneDetails, isLocationDetails, formatPhone, format
 import { rlSystem } from '../shared/learning-rl';
 import type { LearnedPattern } from '../shared/learning-types';
 import { getOllamaConfig, saveOllamaConfig, testOllamaConnection, DEFAULT_OLLAMA_CONFIG } from '../shared/ollama-config';
+import { setHTML, clearEl } from '../shared/html';
 
 // PDF.js is loaded via CDN in the HTML
 declare const pdfjsLib: any;
@@ -164,7 +165,7 @@ function showErrorDetails(error: string, details?: any): void {
 
   html += '</div>';
 
-  errorDetailsEl.innerHTML = html;
+  setHTML(errorDetailsEl, html);
 }
 
 /**
@@ -173,7 +174,7 @@ function showErrorDetails(error: string, details?: any): void {
 function hideErrorDetails(): void {
   const errorDetailsEl = document.getElementById('errorDetails');
   if (errorDetailsEl) {
-    errorDetailsEl.innerHTML = '';
+    clearEl(errorDetailsEl);
   }
 }
 
@@ -187,10 +188,10 @@ function updateConnectionStatus(connected: boolean): void {
 
   if (connected) {
     statusEl.className = 'connection-status connected';
-    statusEl.innerHTML = '<span class="status-indicator connected"></span><span>Ollama Connected — AI parsing ready</span>';
+    setHTML(statusEl, '<span class="status-indicator connected"></span><span>Ollama Connected — AI parsing ready</span>');
   } else {
     statusEl.className = 'connection-status disconnected';
-    statusEl.innerHTML = '<span class="status-indicator disconnected"></span><span>Ollama not detected — AI parsing unavailable (you can still fill info manually)</span>';
+    setHTML(statusEl, '<span class="status-indicator disconnected"></span><span>Ollama not detected — AI parsing unavailable (you can still fill info manually)</span>');
   }
 }
 
@@ -432,7 +433,7 @@ async function extractTextFromPDF(file: File): Promise<string> {
   try {
     // Configure PDF.js worker if not already set
     if (typeof pdfjsLib !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      pdfjsLib.GlobalWorkerOptions.workerSrc = browser.runtime.getURL('pdf.worker.mjs');
     }
     
     updateProgress('extract', 30, 'Loading PDF...');
@@ -727,7 +728,7 @@ function renderProfilePreview(profile: UserProfile): void {
   
   html += '</form>';
   
-  preview.innerHTML = html;
+  setHTML(preview, html);
   
   // Setup event listeners for skills
   setupSkillsEventListeners();
@@ -760,7 +761,7 @@ function setupSkillsEventListeners(): void {
       const div = document.createElement('div');
       div.className = 'editable-list-item';
       div.setAttribute('data-skill-index', String(index));
-      div.innerHTML = `<input type="text" placeholder="Enter skill..." /><button type="button" class="remove-skill-btn">Remove</button>`;
+      setHTML(div, `<input type="text" placeholder="Enter skill..." /><button type="button" class="remove-skill-btn">Remove</button>`);
       
       // Add event listener to the new remove button
       const removeBtn = div.querySelector('.remove-skill-btn');
@@ -874,11 +875,11 @@ function showSuggestionResult(tile: HTMLElement, fieldName: string, value: strin
   // Create suggestion result UI
   const result = document.createElement('div');
   result.className = 'ai-suggestion-result';
-  result.innerHTML = `
+  setHTML(result, `
     <span class="suggestion-text">${escapeHtml(value)}</span>
     <button type="button" class="accept-btn">Accept</button>
     <button type="button" class="dismiss-btn">Dismiss</button>
-  `;
+  `);
 
   // Accept: fill the input with the suggested value
   result.querySelector('.accept-btn')!.addEventListener('click', () => {
@@ -1183,7 +1184,7 @@ function populateReviewSummary(): void {
     html += '</div>';
   }
 
-  container.innerHTML = html;
+  setHTML(container, html);
 }
 
 /**
@@ -1619,7 +1620,7 @@ function renderPatternCard(pattern: LearnedPattern): HTMLElement {
     ? pattern.fieldLabel.charAt(0).toUpperCase() + pattern.fieldLabel.slice(1)
     : pattern.fieldType;
 
-  card.innerHTML = `
+  setHTML(card, `
     <div class="rl-card__header">
       <span class="rl-card__field-name">${displayLabel}</span>
       <button class="rl-card__delete" data-pattern-id="${pattern.id}" title="Delete this learned pattern">Delete</button>
@@ -1638,7 +1639,7 @@ function renderPatternCard(pattern: LearnedPattern): HTMLElement {
       &nbsp;&middot;&nbsp; Last used ${lastUsedStr}
       ${contextStr ? `<div class="rl-card__ctx">${contextStr}</div>` : ''}
     </div>
-  `;
+  `);
 
   return card;
 }
@@ -1658,19 +1659,19 @@ async function loadLearnedValues(showBackButton = false): Promise<void> {
     const buttonGroup = document.getElementById('learnedButtonGroup');
     if (buttonGroup) {
       if (showBackButton) {
-        buttonGroup.innerHTML = `
+        setHTML(buttonGroup, `
           <button id="backFromLearnedBtn" class="btn btn-secondary">Back</button>
           <button id="clearAllLearnedBtn" class="btn btn-outline-danger">Clear All</button>
-        `;
+        `);
         const backBtn = document.getElementById('backFromLearnedBtn');
         if (backBtn) {
           backBtn.addEventListener('click', () => showStep('step-success'));
         }
       } else {
-        buttonGroup.innerHTML = `
+        setHTML(buttonGroup, `
           <a id="doneFromLearnedBtn" class="btn btn-primary" href="../home/home.html">Back to Home</a>
           <button id="clearAllLearnedBtn" class="btn btn-outline-danger">Clear All</button>
-        `;
+        `);
       }
 
       // Wire up Clear All button
@@ -1691,10 +1692,10 @@ async function loadLearnedValues(showBackButton = false): Promise<void> {
     // Fetch patterns
     const patterns = await rlSystem.getAllPatterns();
 
-    container.innerHTML = '';
+    clearEl(container);
 
     if (patterns.length === 0) {
-      container.innerHTML = `
+      setHTML(container, `
         <div class="rl-empty-state">
           <div class="rl-empty-state__icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1708,7 +1709,7 @@ async function loadLearnedValues(showBackButton = false): Promise<void> {
             an autofilled value, it will appear here with a confidence score.
           </p>
         </div>
-      `;
+      `);
       return;
     }
 
@@ -2076,7 +2077,7 @@ async function init(): Promise<void> {
       
       parseBtn.disabled = true;
       const originalText = parseBtn.textContent;
-      parseBtn.innerHTML = '<span class="spinner"></span>Parsing...';
+      setHTML(parseBtn, '<span class="spinner"></span>Parsing...');
       hideStatus();
       
       try {

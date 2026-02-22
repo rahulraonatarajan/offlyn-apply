@@ -4,6 +4,7 @@
 import { getSettings, setSettings } from '../shared/storage';
 import { log, error } from '../shared/log';
 import { getOllamaConfig, saveOllamaConfig, testOllamaConnection, DEFAULT_OLLAMA_CONFIG } from '../shared/ollama-config';
+import { setHTML } from '../shared/html';
 
 async function init(): Promise<void> {
   const settings = await getSettings();
@@ -168,12 +169,12 @@ async function initOllamaSettings(): Promise<void> {
         testResultEl.textContent = `Cannot reach Ollama: ${result.error}`;
         testResultEl.className = 'ollama-test-result visible fail';
       } else if (result.corsBlocked) {
-        testResultEl.innerHTML =
+        setHTML(testResultEl,
           `<strong>CORS Blocked</strong> — Ollama v${result.version} is running but blocking this extension.<br><br>` +
           `<strong>Fix:</strong> Stop Ollama, then run this as ONE command in a new terminal:<br>` +
           `<code style="background:#1e2a3a;color:#fbbf24;padding:4px 8px;border-radius:4px;display:inline-block;margin-top:6px;font-size:12px;word-break:break-all;">` +
           `OLLAMA_ORIGINS='moz-extension://*' ollama serve</code><br>` +
-          `<span style="font-size:11px;color:#6b7280;margin-top:4px;display:inline-block;">Keep that terminal open, then click Test Connection again.</span>`;
+          `<span style="font-size:11px;color:#6b7280;margin-top:4px;display:inline-block;">Keep that terminal open, then click Test Connection again.</span>`);
         testResultEl.className = 'ollama-test-result visible fail';
       } else {
         testResultEl.textContent = `Connected! Ollama v${result.version} — AI features fully working`;

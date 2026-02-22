@@ -3,9 +3,10 @@
  */
 
 import type { PopupState } from '../shared/types';
-import { getSettings, setSettings, getTodayApplications, generateSummaryMessage } from '../shared/storage';
+import { getSettings, setSettings, getTodayApplications, getAllApplications, generateSummaryMessage } from '../shared/storage';
 import { log, error } from '../shared/log';
 import { getUserProfile, checkProfileCompleteness } from '../shared/profile';
+import { setHTML } from '../shared/html';
 
 let currentState: PopupState = {
   enabled: true,
@@ -44,7 +45,7 @@ function updateUI(): void {
     if (currentState.lastJob) {
       const title = currentState.lastJob.title || 'Unknown Title';
       const company = currentState.lastJob.hostname || '';
-      jobInfoEl.innerHTML = `
+      setHTML(jobInfoEl, `
         <div class="job-bar-detected">
           <div class="job-dot"></div>
           <div>
@@ -52,20 +53,19 @@ function updateUI(): void {
             <div class="job-bar-detail">${escapeHtml(title)} &middot; ${escapeHtml(company)}</div>
           </div>
         </div>
-      `;
+      `);
     } else {
-      jobInfoEl.innerHTML = '<div class="job-bar-empty">No job detected yet</div>';
+      setHTML(jobInfoEl, '<div class="job-bar-empty">No job detected yet</div>');
     }
   }
 }
 
 async function updateStats(): Promise<void> {
   try {
-    const summary = await getTodayApplications();
-    // Only count non-detected applications (tracked applications)
-    const trackedApps = summary.applications.filter(a => a.status !== 'detected');
-    const total = trackedApps.length;
-    const interviewing = trackedApps.filter(a => a.status === 'interviewing').length;
+    // getAllApplications already filters out 'detected' and returns all-time data
+    const apps = await getAllApplications();
+    const total = apps.length;
+    const interviewing = apps.filter(a => a.status === 'interviewing').length;
 
     const totalEl = document.getElementById('stat-total');
     const interviewingEl = document.getElementById('stat-interviewing');
@@ -121,7 +121,7 @@ async function checkProfileStatus(): Promise<void> {
 
     if (!profile) {
       warningEl.style.display = 'block';
-      warningEl.innerHTML = '<strong>No profile found.</strong> <a href="#" id="profile-warning-link" style="color:#ea580c;text-decoration:underline;">Set up your profile</a> to enable auto-fill.';
+      setHTML(warningEl, '<strong>No profile found.</strong> <a href="#" id="profile-warning-link" style="color:#ea580c;text-decoration:underline;">Set up your profile</a> to enable auto-fill.');
       warningEl.querySelector('#profile-warning-link')?.addEventListener('click', (e) => {
         e.preventDefault();
         browser.tabs.create({ url: browser.runtime.getURL('onboarding/onboarding.html') });
@@ -138,7 +138,7 @@ async function checkProfileStatus(): Promise<void> {
       const moreCount = completeness.missingFields.length - 4;
       const moreText = moreCount > 0 ? ` +${moreCount} more` : '';
       warningEl.style.display = 'block';
-      warningEl.innerHTML = `<strong>Profile ${completeness.completionPercentage}% complete.</strong> Missing: ${missing}${moreText}. <a href="#" id="profile-warning-link" style="color:#ea580c;text-decoration:underline;">Complete profile</a>`;
+      setHTML(warningEl, `<strong>Profile ${completeness.completionPercentage}% complete.</strong> Missing: ${missing}${moreText}. <a href="#" id="profile-warning-link" style="color:#ea580c;text-decoration:underline;">Complete profile</a>`);
       warningEl.querySelector('#profile-warning-link')?.addEventListener('click', (e) => {
         e.preventDefault();
         browser.tabs.create({ url: browser.runtime.getURL('onboarding/onboarding.html') });

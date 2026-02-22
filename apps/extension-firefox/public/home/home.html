@@ -632,23 +632,6 @@
   <div id="statRateEl" style="display:none;"></div>
 
   <script src="home.js"></script>
-  <script>
-    // Wire up sidebar nav buttons to same actions as main nav
-    document.getElementById('navDashboardCard')?.addEventListener('click', () =>
-      document.getElementById('navDashboard')?.click());
-    document.getElementById('navDashboardSide')?.addEventListener('click', () =>
-      document.getElementById('navDashboard')?.click());
-    document.getElementById('navProfileSide')?.addEventListener('click', () =>
-      document.getElementById('navProfile')?.click());
-    // Update dashboard badge with stat
-    document.addEventListener('DOMContentLoaded', () => {
-      const observer = new MutationObserver(() => {
-        const total = document.getElementById('statTotal')?.textContent;
-        if (total) document.getElementById('dashBadge').textContent = total + ' Applications';
-      });
-      const el = document.getElementById('statTotal');
-      if (el) observer.observe(el, { childList: true, characterData: true, subtree: true });
-    });
-  </script>
+  <script src="home-init.js"></script>
 </body>
 </html>

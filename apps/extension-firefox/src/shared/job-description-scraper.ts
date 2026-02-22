@@ -220,9 +220,8 @@ function extractVisibleText(root: HTMLElement): string {
 }
 
 function stripHtml(html: string): string {
-  const d = document.createElement('div');
-  d.innerHTML = html;
-  return d.textContent?.trim() || '';
+  const d = new DOMParser().parseFromString(html, 'text/html');
+  return d.body.textContent?.trim() || '';
 }
 
 function extractBullets(text: string): string[] {

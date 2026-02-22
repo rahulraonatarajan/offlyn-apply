@@ -67,6 +67,8 @@ import {
   setReactCheckboxValue
 } from './shared/react-input';
 
+const IS_TOP_FRAME = window.self === window.top;
+
 let lastJobMeta: JobMeta | null = null;
 let lastSchema: string | null = null;
 let resumeFilesUploaded: Set<string> = new Set(); // Track which file inputs we've already filled
@@ -249,7 +251,20 @@ function detectPage(): void {
       
       info('Detected job application page:', jobMeta.jobTitle || 'Unknown');
       sendToBackground(event);
-      
+
+      // If running inside an iframe, forward field schema to the parent frame and skip
+      // showing the widget here — the parent will render a single unified panel.
+      if (!IS_TOP_FRAME) {
+        try {
+          window.parent.postMessage({
+            type: 'OFFLYN_IFRAME_FIELDS',
+            fields: uniqueFields,
+            url: window.location.href,
+          }, '*');
+        } catch (_) { /* cross-origin, parent can't be reached — ignore */ }
+        return;
+      }
+
       // Show unified floating widget (compatibility oval + action panel)
       void (async () => {
         try {
@@ -974,31 +989,21 @@ window.addEventListener('offlyn-manual-autofill', async () => {
     info('Manual trigger: starting autofill with highlighting');
     await tryAutoFill(allDetectedFields);
   } else {
-    // If no fields in current frame, check if we're in the top frame
-    if (window.self === window.top) {
-      // We're in the parent page with no fields - try triggering autofill in iframes
-      warn('[Autofill] No fields in parent page, checking iframes...');
-      const iframes = Array.from(document.querySelectorAll('iframe'));
-      let foundIframeWithFields = false;
-      
-      for (const iframe of iframes) {
-        try {
-          // Post message to iframe to trigger autofill
-          iframe.contentWindow?.postMessage({ type: 'OFFLYN_TRIGGER_AUTOFILL' }, '*');
-          foundIframeWithFields = true;
-          info(`[Autofill] Sent autofill trigger to iframe: ${iframe.src}`);
-        } catch (err) {
-          // Cross-origin iframe, can't access
-          warn('[Autofill] Cannot access iframe (cross-origin):', iframe.src);
-        }
+    warn('[Autofill] No detected fields in this frame. Refresh the scan first.');
+  }
+
+  // Top frame: always broadcast to child iframes so embedded forms (e.g. Greenhouse
+  // embedded inside an employer's careers page) are filled alongside the parent.
+  if (IS_TOP_FRAME) {
+    const iframes = Array.from(document.querySelectorAll('iframe'));
+    for (const iframe of iframes) {
+      try {
+        iframe.contentWindow?.postMessage({ type: 'OFFLYN_TRIGGER_AUTOFILL' }, '*');
+        info(`[Autofill] Forwarded autofill trigger to iframe: ${iframe.src}`);
+      } catch (_) {
+        // Cross-origin iframe — content script in that frame handles its own autofill
+        // when triggered via browser.runtime.sendMessage from the extension popup.
       }
-      
-      if (!foundIframeWithFields) {
-        warn('[Autofill] No detected fields. Refresh the scan first.');
-      }
-    } else {
-      // We're in an iframe with no fields
-      warn('[Autofill] No detected fields. Refresh the scan first.');
     }
   }
 });
@@ -1024,6 +1029,16 @@ window.addEventListener('message', async (event) => {
       trySmartSuggestions();
     } else {
       warn('[Suggestions] Iframe has no detected fields');
+    }
+  } else if (event.data.type === 'OFFLYN_IFRAME_FIELDS' && IS_TOP_FRAME) {
+    // A child iframe detected a job application form and reported its fields.
+    // If the iframe has more fields than what we see in the parent page, update
+    // the widget so the user sees the real form's field count.
+    const iframeFields = event.data.fields as FieldSchema[];
+    const iframeUrl = event.data.url as string;
+    if (Array.isArray(iframeFields) && iframeFields.length > allDetectedFields.length) {
+      info(`[OA] Child iframe (${iframeUrl}) has ${iframeFields.length} fields — updating widget`);
+      updateCompatibilityFields(iframeFields);
     }
   }
 });
@@ -1146,8 +1161,18 @@ function handleSubmitAttempt(e: Event): void {
     if (!applyPattern.test(text)) {
       return;
     }
+
+    // ── Job application guard ──────────────────────────────────────────
+    // Only process if this page has already been identified as a job
+    // application page. This prevents learning from login forms, search
+    // boxes, newsletter signups, etc.
+    // lastJobMeta is set by detectPage() only when isJobApplicationPage()
+    // returns true, so it is the reliable indicator.
+    if (!lastJobMeta) {
+      return;
+    }
     
-    const jobMeta = lastJobMeta || extractJobMetadata();
+    const jobMeta = lastJobMeta;
     const forms = Array.from(document.querySelectorAll('form'));
     const allFields: ReturnType<typeof extractFormSchema> = [];
     for (const form of forms) {
@@ -1167,8 +1192,8 @@ function handleSubmitAttempt(e: Event): void {
     sendToBackground(event);
 
     // ── Learn from submission ──────────────────────────────────────────
-    // Snapshot all current field values and save them for future autofill.
-    // Use the detected fields (which include all fields we know about).
+    // Use the pre-scanned fields if available — they were scanned when the
+    // page was first identified as a job application page.
     const fieldsToLearn = allDetectedFields.length > 0 ? allDetectedFields : allFields;
     learnFromCurrentFormValues(fieldsToLearn, jobMeta);
   } catch (err) {
@@ -1192,10 +1217,25 @@ async function learnFromCurrentFormValues(
   jobMeta: JobMeta | null
 ): Promise<void> {
   try {
+    // Double-guard: refuse to learn if there's no confirmed job context.
+    // This is a safety net in case this function is ever called directly
+    // without going through handleSubmitAttempt's guard.
+    if (!jobMeta) {
+      info('[RL] Skipping learning — no job context (not a job application page)');
+      return;
+    }
+
+    // Also require that we have at least some detected fields — an empty field
+    // list means this page was never properly scanned as a job application.
+    if (fields.length === 0) {
+      info('[RL] Skipping learning — no detected fields');
+      return;
+    }
+
     const jobCtx = {
       url: window.location.href,
-      company: jobMeta?.company || '',
-      jobTitle: jobMeta?.jobTitle || '',
+      company: jobMeta.company || '',
+      jobTitle: jobMeta.jobTitle || '',
     };
 
     // Collect current DOM values for all fields
@@ -2597,35 +2637,41 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
         }
         
         // STEP 4: Fallback to tokenized partial matching
+        // When multiple options contain all target tokens, prefer the option with the
+        // FEWEST extra words (i.e. closest length to target) to avoid selecting a longer
+        // but semantically opposite option (e.g. "I am a veteran..." vs "I am not a veteran").
         if (!optionClicked && realOptions.length > 0) {
           console.log('[OA] Step 4: Trying tokenized partial matching...');
           
-          // Tokenize the desired value (e.g., "United States" → ["united", "states"])
-          // For very short values like "+1", split by any non-alphanumeric character
           let tokens: string[];
           if (valueToMatch.length <= 3) {
-            // Don't tokenize very short values - they need exact or prefix match
             tokens = [valueToMatch];
           } else {
-            // Split by whitespace for normal values
             tokens = valueToMatch.split(/\s+/).filter(t => t.length > 2);
           }
           
-          // Skip tokenized matching if no valid tokens (empty array would match everything)
           if (tokens.length === 0) {
             console.log('[OA] No valid tokens for matching, skipping tokenized step');
           } else {
+            const targetWordCount = valueToMatch.split(/\s+/).length;
+            let bestTokenMatch: { option: Element; extraWords: number; text: string } | null = null;
+
             for (const option of realOptions) {
               const optionText = (option.textContent || '').toLowerCase().trim();
-              
-              // Check if option contains all tokens
               const matchesAllTokens = tokens.every(token => optionText.includes(token));
               if (matchesAllTokens) {
-                console.log('[OA] ✓ Tokenized match:', optionText);
-                (option as HTMLElement).click();
-                optionClicked = true;
-                break;
+                const optionWordCount = optionText.split(/\s+/).length;
+                const extraWords = Math.max(0, optionWordCount - targetWordCount);
+                if (bestTokenMatch === null || extraWords < bestTokenMatch.extraWords) {
+                  bestTokenMatch = { option, extraWords, text: optionText };
+                }
               }
+            }
+
+            if (bestTokenMatch) {
+              console.log('[OA] ✓ Tokenized match:', bestTokenMatch.text, '(extra words:', bestTokenMatch.extraWords, ')');
+              (bestTokenMatch.option as HTMLElement).click();
+              optionClicked = true;
             }
           }
         }

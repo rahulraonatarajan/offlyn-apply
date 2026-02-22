@@ -10,6 +10,7 @@
  */
 
 import type { FieldSchema } from '../shared/types';
+import { setHTML } from '../shared/html';
 
 /** Track active (visible or hidden) tiles */
 interface TileEntry {
@@ -118,14 +119,14 @@ function registerFieldTile(field: FieldSchema, element: HTMLElement): void {
   tile.className = 'offlyn-ai-tile';
   tile.setAttribute('data-offlyn-selector', field.selector);
 
-  tile.innerHTML = `
+  setHTML(tile, `
     <span class="offlyn-ai-tile__icon">
       <svg width="10" height="10" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M8 0L9.79 5.53H15.6L10.91 8.94L12.7 14.47L8 11.06L3.3 14.47L5.09 8.94L0.4 5.53H6.21L8 0Z" fill="currentColor"/>
       </svg>
     </span>
     <span class="offlyn-ai-tile__text">AI fill</span>
-  `;
+  `);
 
   const inputEl = element as HTMLInputElement | HTMLTextAreaElement;
   const isEmpty = () => !inputEl.value?.trim();

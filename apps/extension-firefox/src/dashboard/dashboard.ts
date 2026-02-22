@@ -3,6 +3,7 @@
  * Displays applications in status columns with edit/delete functionality
  */
 
+import { setHTML } from '../shared/html';
 import {
   getAllApplications,
   getApplicationStats,
@@ -149,12 +150,12 @@ function renderKanbanBoard() {
   if (!container) return;
   
   if (filteredApplications.length === 0) {
-    container.innerHTML = `
+    setHTML(container, `
       <div class="empty-state">
         <h3>No applications found</h3>
         <p>${allApplications.length === 0 ? 'Start submitting applications and they will appear here' : 'Try adjusting your search'}</p>
       </div>
-    `;
+    `);
     return;
   }
   
@@ -167,8 +168,7 @@ function renderKanbanBoard() {
     withdrawn: filteredApplications.filter(a => a.status === 'withdrawn'),
   };
   
-  // Create Kanban board HTML
-  const boardHTML = `
+  setHTML(container, `
     <div class="kanban-board">
       ${createKanbanColumn('submitted', 'Submitted', columns.submitted)}
       ${createKanbanColumn('interviewing', 'Interviewing', columns.interviewing)}
@@ -176,9 +176,7 @@ function renderKanbanBoard() {
       ${createKanbanColumn('accepted', 'Accepted', columns.accepted)}
       ${createKanbanColumn('withdrawn', 'Withdrawn', columns.withdrawn)}
     </div>
-  `;
-  
-  container.innerHTML = boardHTML;
+  `);
   
   // Attach event listeners to cards
   attachCardListeners();
@@ -656,12 +654,12 @@ function escapeCSV(field: string): string {
 function showError(message: string) {
   const container = document.getElementById('kanbanContent');
   if (container) {
-    container.innerHTML = `
+    setHTML(container, `
       <div class="empty-state">
         <h3>Error</h3>
         <p>${escapeHtml(message)}</p>
       </div>
-    `;
+    `);
   }
 }
 

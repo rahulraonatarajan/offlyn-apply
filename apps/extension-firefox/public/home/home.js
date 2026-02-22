@@ -1,6 +1,19 @@
 (async function () {
   const OLLAMA_URL = 'http://localhost:11434/api/tags';
 
+  // Build an array of dailySummary_YYYY-MM-DD keys for the past N days.
+  // Avoids browser.storage.local.get(null) which is unreliable in Firefox.
+  function buildDailySummaryKeys(daysBack) {
+    const keys = [];
+    const today = new Date();
+    for (let i = 0; i < daysBack; i++) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - i);
+      keys.push('dailySummary_' + d.toISOString().split('T')[0]);
+    }
+    return keys;
+  }
+
   function openPage(path) {
     browser.tabs.create({ url: browser.runtime.getURL(path) });
   }
@@ -45,12 +58,15 @@
   document.getElementById('actionClear').addEventListener('click', async () => {
     if (!confirm('Clear all tracked job applications? This cannot be undone.')) return;
     try {
-      const keys = await browser.storage.local.get(null);
-      const toRemove = Object.keys(keys).filter(k => k.startsWith('apps_') || k.startsWith('daily_'));
-      if (toRemove.length) await browser.storage.local.remove(toRemove);
+      // Build keys for past 365 days using dailySummary_ prefix
+      const keysToRemove = buildDailySummaryKeys(365);
+      await browser.storage.local.remove(keysToRemove);
       document.getElementById('statTotal').textContent = '0';
       document.getElementById('statInterviewing').textContent = '0';
       document.getElementById('statThisWeek').textContent = '0';
+      if (document.getElementById('statRate')) {
+        document.getElementById('statRate').textContent = '0%';
+      }
     } catch (err) {
       console.error('Clear failed:', err);
     }
@@ -58,26 +74,33 @@
 
   // --- Load stats ---
   try {
-    const all = await browser.storage.local.get(null);
+    const keys = buildDailySummaryKeys(365);
+    const all = await browser.storage.local.get(keys);
     let total = 0;
     let interviewing = 0;
     let thisWeek = 0;
+    let responded = 0;
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-    for (const key of Object.keys(all)) {
-      if (!key.startsWith('apps_')) continue;
-      const apps = all[key];
-      if (!Array.isArray(apps)) continue;
-      for (const app of apps) {
+    for (const key of keys) {
+      const summary = all[key];
+      if (!summary || !Array.isArray(summary.applications)) continue;
+      for (const app of summary.applications) {
+        if (app.status === 'detected') continue; // skip unsubmitted detections
         total++;
         if (app.status === 'interviewing') interviewing++;
+        if (app.status === 'interviewing' || app.status === 'rejected' || app.status === 'accepted') responded++;
         if (app.timestamp && app.timestamp > weekAgo) thisWeek++;
       }
     }
 
+    const responseRate = total > 0 ? Math.round((responded / total) * 100) : 0;
+
     document.getElementById('statTotal').textContent = String(total);
     document.getElementById('statInterviewing').textContent = String(interviewing);
     document.getElementById('statThisWeek').textContent = String(thisWeek);
+    const rateEl = document.getElementById('statRate');
+    if (rateEl) rateEl.textContent = responseRate + '%';
   } catch (err) {
     console.error('Failed to load stats:', err);
   }

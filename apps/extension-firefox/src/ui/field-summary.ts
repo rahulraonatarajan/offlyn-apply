@@ -5,6 +5,7 @@
  */
 
 import type { FieldSchema } from '../shared/types';
+import { setHTML } from '../shared/html';
 
 let summaryPanel: HTMLElement | null = null;
 let panelFields: FieldSchema[] = [];
@@ -33,7 +34,7 @@ export function showFieldSummary(fields: FieldSchema[], jobTitle?: string, compa
   // Build expanded panel
   summaryPanel = document.createElement('div');
   summaryPanel.id = 'offlyn-field-summary';
-  summaryPanel.innerHTML = buildPanelHTML(fields, jobTitle, company);
+  setHTML(summaryPanel, buildPanelHTML(fields, jobTitle, company));
 
   document.body.appendChild(summaryPanel);
 
@@ -281,16 +282,16 @@ function updatePanelContent(panel: HTMLElement, fields: FieldSchema[], jobTitle?
   const jobEl = panel.querySelector('.ofl-job');
   if (jobTitle || company) {
     if (jobEl) {
-      jobEl.innerHTML = `
+      setHTML(jobEl, `
         ${jobTitle ? `<div class="ofl-job-title">${escapeHtml(jobTitle)}</div>` : ''}
         ${company ? `<div class="ofl-job-company">${escapeHtml(company)}</div>` : ''}
-      `;
+      `);
     }
   }
 
   const statsEl = panel.querySelector('.ofl-stats');
   if (statsEl) {
-    statsEl.innerHTML = `
+    setHTML(statsEl, `
       <div class="ofl-stat">
         <span class="ofl-stat-num">${fields.length}</span>
         <span class="ofl-stat-label">fields</span>
@@ -301,7 +302,7 @@ function updatePanelContent(panel: HTMLElement, fields: FieldSchema[], jobTitle?
           <span class="ofl-stat-label">required</span>
         </div>
       ` : ''}
-    `;
+    `);
   }
 }
 

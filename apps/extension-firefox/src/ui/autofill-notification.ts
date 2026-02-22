@@ -3,6 +3,8 @@
  * Brand: navy #1e293b + green #16a34a
  */
 
+import { setHTML } from '../shared/html';
+
 let notification: HTMLElement | null = null;
 let autoHideTimeout: number | null = null;
 
@@ -12,7 +14,7 @@ export function showAutofillNotification(fieldCount: number): void {
 
   notification = document.createElement('div');
   notification.id = 'offlyn-autofill-notification';
-  notification.innerHTML = `
+  setHTML(notification, `
     <div class="offlyn-notif-content">
       <div class="offlyn-notif-icon">
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -28,7 +30,7 @@ export function showAutofillNotification(fieldCount: number): void {
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>
       </button>
     </div>
-  `;
+  `);
 
   document.body.appendChild(notification);
 
