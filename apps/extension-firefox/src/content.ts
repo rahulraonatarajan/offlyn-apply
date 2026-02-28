@@ -3,7 +3,7 @@
  */
 
 import type { ApplyEvent, FillPlan, FillResult, JobMeta, FieldSchema } from './shared/types';
-import { extractJobMetadata, extractFormSchema, isJobApplicationPage } from './shared/dom';
+import { extractJobMetadata, extractFormSchema, isJobApplicationPage, isJobConfirmationPage } from './shared/dom';
 import { log, info, warn, error } from './shared/log';
 import { hideFieldSummary, ensureFieldSummaryExpanded } from './ui/field-summary';
 import { showCompatibilityWidget, updateCompatibilityFields, removeCompatibilityWidget } from './ui/compatibility-widget';
@@ -55,6 +55,7 @@ import {
   clearAllHighlights
 } from './ui/field-highlighter';
 import { showNotification, showSuccess, showError, showWarning, showInfo } from './ui/notification';
+import { showTrackingBadge, hideTrackingBadge } from './ui/tracking-badge';
 import {
   showInlineSuggestionTiles,
   removeAllTiles
@@ -66,6 +67,7 @@ import {
   fillNativeSelect,
   setReactCheckboxValue
 } from './shared/react-input';
+import { isWorkdayPage, detectWorkdayStep, runWorkdaySpecialHandlers } from './shared/workday-handler';
 
 const IS_TOP_FRAME = window.self === window.top;
 
@@ -154,6 +156,34 @@ function detectPage(): void {
     console.log('[OA] detectPage() called');
     console.log('[OA] URL:', window.location.href);
     
+    // ── Confirmation-page fast path ────────────────────────────────────────
+    // A /confirmation or /thank-you URL is definitive proof of submission.
+    // Record the application immediately without requiring form fields.
+    if (isJobConfirmationPage()) {
+      console.log('[OA] ✓ Confirmation/thank-you page detected — recording submission');
+      const jobMeta = extractJobMetadata();
+
+      // Avoid double-recording if we already fired for this exact URL
+      const confirmationKey = `offlyn_confirmed_${window.location.href}`;
+      if (sessionStorage.getItem(confirmationKey)) {
+        console.log('[OA] Confirmation already recorded this session, skipping');
+        return;
+      }
+      sessionStorage.setItem(confirmationKey, '1');
+
+      showTrackingBadge(jobMeta.jobTitle, jobMeta.company);
+
+      const event: ApplyEvent = {
+        kind: 'JOB_APPLY_EVENT',
+        eventType: 'SUBMIT_ATTEMPT',
+        jobMeta,
+        schema: [],
+        timestamp: Date.now(),
+      };
+      sendToBackground(event);
+      return;
+    }
+
     const isJobPage = isJobApplicationPage();
     console.log('[OA] isJobApplicationPage():', isJobPage);
     
@@ -237,6 +267,9 @@ function detectPage(): void {
     if (schemaHash !== lastSchema || JSON.stringify(jobMeta) !== JSON.stringify(lastJobMeta)) {
       lastJobMeta = jobMeta;
       lastSchema = schemaHash;
+
+      // Show subtle tracking badge so user knows this application will be recorded
+      showTrackingBadge(jobMeta.jobTitle, jobMeta.company);
       
       // Store detected fields globally
       allDetectedFields = uniqueFields;
@@ -334,6 +367,18 @@ async function tryAutoFill(schema: ReturnType<typeof extractFormSchema>): Promis
     
     // Execute immediately (settings will be checked in executeFillPlan)
     await executeFillPlan(fillPlan);
+
+    // Workday-specific: handle "Add" modal sections (Work Experience, Education,
+    // Languages) and the Skills tag-input that the generic engine cannot reach.
+    if (isWorkdayPage()) {
+      const wdStep = detectWorkdayStep();
+      info(`[Workday] Step detected: "${wdStep}"`);
+      try {
+        await runWorkdaySpecialHandlers(profile);
+      } catch (wdErr) {
+        warn('[Workday] Special handler error (non-fatal):', wdErr);
+      }
+    }
     
     // Also try to fill resume file inputs (await to catch errors)
     await fillResumeFileInputs();
@@ -1151,10 +1196,14 @@ async function waitForStateTransition(): Promise<void> {
 /**
  * Handle submit/apply button clicks.
  * On submit, we also snapshot all current field values for the learning system.
+ * @param e   - The original DOM event
+ * @param resolvedTarget - The nearest button/link ancestor (pre-resolved via closest())
  */
-function handleSubmitAttempt(e: Event): void {
+function handleSubmitAttempt(e: Event, resolvedTarget?: HTMLElement): void {
   try {
-    const target = e.target as HTMLElement;
+    // Use the pre-resolved button element when available (avoids missing clicks
+    // on icon/span children of buttons). Fall back to e.target for submit events.
+    const target = resolvedTarget ?? (e.target as HTMLElement);
     const text = target.textContent || target.getAttribute('value') || '';
     const applyPattern = /apply|submit|next|continue/i;
     
@@ -3512,36 +3561,36 @@ async function init(): Promise<void> {
     handleSubmitAttempt(e);
   }, true); // Use capture phase
   
-  // Listen for button/link clicks (for multi-page forms and Apply buttons)
+  // Listen for button/link clicks (for multi-page forms and Apply buttons).
+  // Use closest() so clicks on icon/span children of buttons are still caught.
   document.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'BUTTON' || 
-        target.tagName === 'INPUT' || 
-        target.tagName === 'A') {
-      handleSubmitAttempt(e);
-      
-      // Check if this might navigate to next page or load form
-      const text = target.textContent?.toLowerCase() || '';
-      
-      // Skip if this is our own suggestion panel (don't interfere with our UI)
-      if (target.closest('#offlyn-suggestion-panel')) {
-        return;
-      }
-      
-      if (text.includes('next') || text.includes('continue')) {
-        // Multi-page flow: wait for actual state transition before rescanning
-        info('Detected "Next" button click, waiting for state transition...');
-        waitForStateTransition().then(() => {
-          info('State transition detected, re-scanning for new fields...');
-          detectPage();
-        });
-      } else if (text.includes('apply') || text.includes('start application')) {
-        // "Apply" button clicked - form might load
-        info('Detected "Apply" button click, waiting for form to load...');
-        setTimeout(detectPage, 1000);
-        setTimeout(detectPage, 2000);
-        setTimeout(detectPage, 3000);
-      }
+    const clicked = e.target as HTMLElement;
+
+    // Skip clicks inside our own UI panels
+    if (clicked.closest('#offlyn-suggestion-panel')) return;
+
+    // Walk up to the nearest interactive element
+    const target = clicked.closest('button, a, [role="button"], input[type="submit"], input[type="button"]') as HTMLElement | null;
+    if (!target) return;
+
+    handleSubmitAttempt(e, target);
+
+    // Check if this might navigate to next page or load form
+    const text = (target.textContent || target.getAttribute('value') || '').toLowerCase();
+
+    if (text.includes('next') || text.includes('continue')) {
+      // Multi-page flow: wait for actual state transition before rescanning
+      info('Detected "Next" button click, waiting for state transition...');
+      waitForStateTransition().then(() => {
+        info('State transition detected, re-scanning for new fields...');
+        detectPage();
+      });
+    } else if (text.includes('apply') || text.includes('start application')) {
+      // "Apply" button clicked - form might load
+      info('Detected "Apply" button click, waiting for form to load...');
+      setTimeout(detectPage, 1000);
+      setTimeout(detectPage, 2000);
+      setTimeout(detectPage, 3000);
     }
   }, true);
   
@@ -3558,6 +3607,9 @@ async function init(): Promise<void> {
       filledSelectors.clear();
       lastCoverLetterResult = null;
       lastCoverLetterAutoApplySelector = null;
+
+      // Hide badge until new page is confirmed as a job page
+      hideTrackingBadge();
       
       // Re-detect after navigation
       setTimeout(detectPage, 500);

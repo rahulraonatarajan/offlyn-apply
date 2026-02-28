@@ -70,7 +70,17 @@ export function extractLabel(field: HTMLInputElement | HTMLSelectElement | HTMLT
     }
   }
   
-  // Strategy 7: Preceding sibling text (common pattern)
+  // Strategy 7: Workday — [data-automation-id="formField"] → [data-automation-id="label"]
+  const workdayFormField = field.closest('[data-automation-id="formField"]');
+  if (workdayFormField) {
+    const workdayLabel = workdayFormField.querySelector('[data-automation-id="label"]');
+    if (workdayLabel) {
+      const text = getVisibleText(workdayLabel);
+      if (text) return text;
+    }
+  }
+
+  // Strategy 8: Preceding sibling text (common pattern)
   let prev = field.previousElementSibling;
   while (prev) {
     if (prev.tagName === 'LABEL' || prev.tagName === 'SPAN' || prev.tagName === 'DIV') {
@@ -659,65 +669,67 @@ function generateShadowSelector(field: HTMLInputElement | HTMLSelectElement | HT
 /**
  * Extract job metadata from the page
  */
+// Heading text that signals a confirmation/thank-you page, not a job title
+const CONFIRMATION_HEADINGS = new Set([
+  'thank you for applying',
+  'thank you',
+  'thanks for applying',
+  'application submitted',
+  'application received',
+  'application complete',
+  'your application has been submitted',
+  'we received your application',
+  'you\'ve applied',
+  'you applied',
+  'application successful',
+]);
+
+// ATS provider names that should never be used as a company name
+const ATS_PROVIDER_NAMES = new Set([
+  'greenhouse', 'lever', 'workday', 'ashby', 'bamboohr', 'icims',
+  'smartrecruiters', 'taleo', 'successfactors', 'jobvite', 'workable',
+  'breezy', 'jazz', 'fountain', 'paylocity', 'ultipro',
+]);
+
+function isConfirmationHeading(text: string): boolean {
+  return CONFIRMATION_HEADINGS.has(text.toLowerCase().trim().replace(/[!.]+$/, ''));
+}
+
 export function extractJobMetadata(): JobMeta {
   const url = window.location.href;
-  
-  // Extract job title - try largest visible heading
-  let jobTitle: string | null = null;
-  const headings = Array.from(document.querySelectorAll('h1, h2, h3')).filter(h => {
-    const rect = h.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0; // Visible
-  });
-  
-  if (headings.length > 0) {
-    // Prefer h1, then h2, then h3
-    const h1 = headings.find(h => h.tagName === 'H1');
-    if (h1) {
-      jobTitle = getVisibleText(h1);
-    } else {
-      const h2 = headings.find(h => h.tagName === 'H2');
-      if (h2) {
-        jobTitle = getVisibleText(h2);
-      } else if (headings[0]) {
-        jobTitle = getVisibleText(headings[0]);
-      }
-    }
-  }
-  
-  // Fallback: look for common title-like elements
-  if (!jobTitle) {
-    const titleSelectors = [
-      '[data-testid*="title"]',
-      '[class*="title"]',
-      '[class*="job-title"]',
-      'strong',
-    ];
-    for (const selector of titleSelectors) {
-      const el = document.querySelector(selector);
-      if (el) {
-        const text = getVisibleText(el);
-        if (text && text.length > 5 && text.length < 200) {
-          jobTitle = text;
-          break;
-        }
-      }
-    }
-  }
-  
-  // Extract company name
+  const parsedUrl = new URL(url);
+  const hostname = parsedUrl.hostname.toLowerCase();
+  const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
+
+  // ── Company extraction ────────────────────────────────────────────────────
+  // Priority: shared-ATS URL path > og:site_name (if not an ATS name) > CSS selectors > subdomain
   let company: string | null = null;
-  
-  // Try meta og:site_name
-  const ogSiteName = document.querySelector('meta[property="og:site_name"]');
-  if (ogSiteName) {
-    company = ogSiteName.getAttribute('content');
+
+  // 1. Shared ATS boards: company is first path segment
+  const PATH_GENERICS = new Set(['jobs', 'job', 'apply', 'application', 'confirmation', 'careers',
+    'positions', 'openings', 'portal', 'en-us', 'en-gb', 'external', 'apply-now']);
+  if (hostname === 'job-boards.greenhouse.io' || hostname === 'boards.greenhouse.io') {
+    company = pathParts[0] || null;
+  } else if (hostname === 'jobs.lever.co') {
+    company = pathParts[0] || null;
+  } else if (hostname === 'app.ashbyhq.com') {
+    company = pathParts.find(p => !PATH_GENERICS.has(p.toLowerCase())) || null;
   }
-  
-  // Try common header selectors
+
+  // 2. og:site_name — skip if it's an ATS provider name
+  if (!company) {
+    const ogSiteName = document.querySelector('meta[property="og:site_name"]');
+    const siteName = ogSiteName?.getAttribute('content')?.trim();
+    if (siteName && !ATS_PROVIDER_NAMES.has(siteName.toLowerCase())) {
+      company = siteName;
+    }
+  }
+
+  // 3. DOM selectors
   if (!company) {
     const companySelectors = [
       '[data-testid*="company"]',
-      '[class*="company"]',
+      '[class*="company-name"]',
       'header [class*="logo"]',
       'header strong',
     ];
@@ -725,19 +737,98 @@ export function extractJobMetadata(): JobMeta {
       const el = document.querySelector(selector);
       if (el) {
         const text = getVisibleText(el);
-        if (text && text.length > 1 && text.length < 100) {
+        if (text && text.length > 1 && text.length < 100 && !ATS_PROVIDER_NAMES.has(text.toLowerCase())) {
           company = text;
           break;
         }
       }
     }
   }
-  
-  // Fallback: domain-based hint
+
+  // 4. Subdomain — skip generic subdomains
   if (!company) {
     try {
-      const hostname = new URL(url).hostname;
-      company = hostname.replace(/^www\./, '').split('.')[0];
+      const parts = hostname.replace(/^www\./, '').split('.');
+      const GENERIC_SUBDOMAINS = new Set(['careers', 'jobs', 'hiring', 'apply', 'work', 'talent',
+        'recruit', 'hr', 'job', 'career', 'boards', 'job-boards']);
+      const companyPart = parts.find(p =>
+        !GENERIC_SUBDOMAINS.has(p) && !ATS_PROVIDER_NAMES.has(p) &&
+        p !== 'com' && p !== 'io' && p !== 'net' && p !== 'org' && p !== 'co' && p.length > 1
+      );
+      company = companyPart || null;
+    } catch {
+      // Ignore
+    }
+  }
+
+  // ── Job title extraction ──────────────────────────────────────────────────
+  // Skip headings that are confirmation messages, not job titles
+  let jobTitle: string | null = null;
+
+  // 1. Visible h1/h2/h3 — skip confirmation-page headings
+  const headings = Array.from(document.querySelectorAll('h1, h2, h3')).filter(h => {
+    const rect = h.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+  for (const tag of ['H1', 'H2', 'H3']) {
+    const el = headings.find(h => h.tagName === tag);
+    if (el) {
+      const text = getVisibleText(el);
+      if (text && !isConfirmationHeading(text)) {
+        jobTitle = text;
+        break;
+      }
+    }
+  }
+
+  // 2. Specific job-title data attributes / classes
+  if (!jobTitle) {
+    const titleSelectors = [
+      '[data-testid*="job-title"]',
+      '[data-testid*="title"]',
+      '[class*="job-title"]',
+    ];
+    for (const selector of titleSelectors) {
+      const el = document.querySelector(selector);
+      if (el) {
+        const text = getVisibleText(el);
+        if (text && text.length > 5 && text.length < 200 && !isConfirmationHeading(text)) {
+          jobTitle = text;
+          break;
+        }
+      }
+    }
+  }
+
+  // 3. og:title (often has real job title even on confirmation pages)
+  if (!jobTitle) {
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    const text = ogTitle?.getAttribute('content');
+    if (text && text.length > 3 && !isConfirmationHeading(text)) {
+      jobTitle = text.replace(/\s*[\|–\-]\s*.+$/, '').trim() || null;
+    }
+  }
+
+  // 4. document.title
+  if (!jobTitle) {
+    const cleaned = document.title.replace(/\s*[\|–\-]\s*.+$/, '').trim();
+    if (cleaned.length > 3 && !isConfirmationHeading(cleaned)) {
+      jobTitle = cleaned;
+    }
+  }
+
+  // 5. URL path — take the most descriptive non-numeric, non-generic segment
+  if (!jobTitle) {
+    try {
+      const skipSegments = new Set(['jobs', 'job', 'apply', 'application', 'confirmation',
+        'careers', 'positions', 'openings', 'thank-you', 'thankyou', 'success', 'submitted',
+        ...pathParts.slice(0, 1)  // skip the company slug we already extracted
+      ]);
+      const candidate = [...pathParts].reverse()
+        .find(p => !skipSegments.has(p.toLowerCase()) && isNaN(Number(p)) && p.length > 2);
+      if (candidate) {
+        jobTitle = candidate.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      }
     } catch {
       // Ignore
     }
@@ -774,6 +865,28 @@ export function extractJobMetadata(): JobMeta {
     url,
     atsHint,
   };
+}
+
+/**
+ * Check if the current URL is a post-submission confirmation / thank-you page.
+ * These pages are definitive proof that an application was just submitted —
+ * no form fields need to be present.
+ */
+export function isJobConfirmationPage(): boolean {
+  const url = window.location.href.toLowerCase();
+  const patterns = [
+    /\/confirmation\b/,
+    /\/thank-you\b/,
+    /\/thank_you\b/,
+    /\/thankyou\b/,
+    /\/application-submitted\b/,
+    /\/submitted\b/,
+    /\/apply-success\b/,
+    /\/application-complete\b/,
+    /[?&]success=true\b/,
+    /[?&]submitted=true\b/,
+  ];
+  return patterns.some(p => p.test(url));
 }
 
 /**

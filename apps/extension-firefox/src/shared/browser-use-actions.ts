@@ -11,7 +11,7 @@ import type { UserProfile } from './profile';
 import type { JobMeta } from './types';
 import { analyzeFieldsWithOllama } from './ollama-service';
 import { getEmbedding, cosineSimilarity, smartMatchDropdown } from './ollama-service';
-import { generateFillMappings } from './autofill';
+import { generateFillMappings, resolveIsHispanicLatino } from './autofill';
 import { rlSystem } from './learning-rl';
 
 /** Action types matching browser-use's action schema */
@@ -145,6 +145,10 @@ function buildProfileSlots(profile: UserProfile): Array<{ label: string; value: 
   if (profile.selfId) {
     if (profile.selfId.gender?.length) slots.push({ label: 'gender identity sex', value: profile.selfId.gender[0] });
     if (profile.selfId.race?.length) slots.push({ label: 'race ethnicity', value: profile.selfId.race[0] });
+    // Resolve Hispanic/Latino using the shared negation-safe helper — the stored
+    // ethnicity string may be "No, not Hispanic or Latino" (full radio text).
+    const _isHispanic = resolveIsHispanicLatino(profile.selfId.ethnicity, profile.selfId.race);
+    slots.push({ label: 'hispanic latino ethnicity', value: _isHispanic ? 'Yes' : 'No' });
     slots.push({ label: 'veteran military status', value: profile.selfId.veteran });
     slots.push({ label: 'disability disabled', value: profile.selfId.disability });
     slots.push({ label: 'transgender', value: profile.selfId.transgender });

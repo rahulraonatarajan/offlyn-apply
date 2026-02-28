@@ -8,6 +8,8 @@ import { rlSystem } from '../shared/learning-rl';
 import type { LearnedPattern } from '../shared/learning-types';
 import { getOllamaConfig, saveOllamaConfig, testOllamaConnection, DEFAULT_OLLAMA_CONFIG } from '../shared/ollama-config';
 import { setHTML, clearEl } from '../shared/html';
+import { classifyParseError } from '../shared/error-classify';
+import { extractPagesText } from '../shared/pdf-extract';
 
 // PDF.js is loaded via CDN in the HTML
 declare const pdfjsLib: any;
@@ -102,6 +104,122 @@ function hideProgress(): void {
   if (progressContainer) {
     progressContainer.classList.remove('visible');
   }
+  hideLiveFeed();
+}
+
+// ── Live Parse Feed ──────────────────────────────────────────────────────
+
+let feedWordTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showLiveFeed(): void {
+  const feed = document.getElementById('liveParseFeed');
+  if (feed) {
+    feed.classList.add('visible');
+    clearEl(feed);
+  }
+}
+
+function hideLiveFeed(): void {
+  const feed = document.getElementById('liveParseFeed');
+  if (feed) feed.classList.remove('visible');
+  if (feedWordTimer) { clearTimeout(feedWordTimer); feedWordTimer = null; }
+}
+
+function appendFeedLine(text: string, cls: string = ''): void {
+  const feed = document.getElementById('liveParseFeed');
+  if (!feed) return;
+
+  // Remove any existing cursor
+  const oldCursor = feed.querySelector('.feed-cursor');
+  if (oldCursor) oldCursor.remove();
+
+  const line = document.createElement('div');
+  line.className = `feed-line ${cls}`.trim();
+  line.textContent = text;
+  feed.appendChild(line);
+
+  // Add blinking cursor after latest line
+  const cursor = document.createElement('span');
+  cursor.className = 'feed-cursor';
+  line.appendChild(cursor);
+
+  feed.scrollTop = feed.scrollHeight;
+}
+
+/**
+ * Stream extracted text word-by-word into the feed.
+ * Shows ~first 120 words so the user can see actual resume content being read.
+ */
+function streamTextToFeed(rawText: string): void {
+  const feed = document.getElementById('liveParseFeed');
+  if (!feed) return;
+
+  showLiveFeed();
+  appendFeedLine('Reading resume content...', 'stage-label');
+
+  const words = rawText.replace(/\s+/g, ' ').trim().split(' ');
+  const maxWords = Math.min(words.length, 120);
+  let i = 0;
+  let currentLine = '';
+  const LINE_WORD_LIMIT = 12;
+
+  const tick = () => {
+    if (i >= maxWords) {
+      if (currentLine) appendFeedLine(currentLine, 'text-chunk');
+      if (words.length > maxWords) {
+        appendFeedLine(`... +${words.length - maxWords} more words`, 'text-chunk');
+      }
+      appendFeedLine('Text extraction complete', 'stage-label');
+      return;
+    }
+    currentLine += (currentLine ? ' ' : '') + words[i];
+    i++;
+    if (i % LINE_WORD_LIMIT === 0 || i >= maxWords) {
+      appendFeedLine(currentLine, 'text-chunk');
+      currentLine = '';
+    }
+    feedWordTimer = setTimeout(tick, 25);
+  };
+  tick();
+}
+
+/**
+ * Listen for PARSE_PROGRESS messages from the background script
+ * and update the live feed + progress bar in real time.
+ */
+let progressListener: ((msg: any) => void) | null = null;
+
+function startProgressListener(): void {
+  if (progressListener) return;
+
+  progressListener = (message: any) => {
+    if (typeof message !== 'object' || message === null) return;
+    if (message.kind !== 'PARSE_PROGRESS') return;
+
+    const { stage, percent, detail } = message as { stage: string; percent: number; detail?: string };
+
+    // Update the main progress bar
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    if (progressFill) progressFill.style.width = `${Math.min(percent, 99)}%`;
+    if (progressText) progressText.textContent = stage;
+
+    // Show in live feed
+    showLiveFeed();
+    appendFeedLine(stage, 'stage-label');
+    if (detail) {
+      appendFeedLine(detail, 'extracted');
+    }
+  };
+
+  browser.runtime.onMessage.addListener(progressListener);
+}
+
+function stopProgressListener(): void {
+  if (progressListener) {
+    browser.runtime.onMessage.removeListener(progressListener);
+    progressListener = null;
+  }
 }
 
 /**
@@ -111,14 +229,24 @@ function showErrorDetails(error: string, details?: any): void {
   const errorDetailsEl = document.getElementById('errorDetails');
   if (!errorDetailsEl) return;
 
-  const isCorsError = /403|Forbidden|CORS|blocking/i.test(error);
-  const isOfflineError = /not connected|ollama not connected|failed to fetch|network/i.test(error) && !isCorsError;
+  const errorKind = classifyParseError(error);
 
   let html = '<div class="error-details">';
   html += '<h4>Parsing Failed</h4>';
   html += `<p><strong>Error:</strong> ${escapeHtml(error)}</p>`;
 
-  if (isCorsError) {
+  if (errorKind === 'model-not-found') {
+    html += `
+      <p><strong>Cause:</strong> Ollama is running but the required AI models are not installed.</p>
+      <p><strong>Fix — run these commands in your terminal:</strong></p>
+      <pre style="background:#1e2a3a;color:#a3e635;padding:10px 12px;border-radius:6px;font-size:12px;margin:8px 0;white-space:pre-wrap;word-break:break-all;">ollama pull llama3.2</pre>
+      <pre style="background:#1e2a3a;color:#a3e635;padding:10px 12px;border-radius:6px;font-size:12px;margin:8px 0;white-space:pre-wrap;word-break:break-all;">ollama pull nomic-embed-text</pre>
+      <p style="font-size:12px;color:#666;margin-top:8px;">
+        These models are required for resume parsing. Downloads are typically 2–4 GB total.
+        After the downloads finish, click <em>Next</em> again to retry.
+      </p>
+    `;
+  } else if (errorKind === 'cors') {
     html += `
       <p><strong>Cause:</strong> Ollama is running but blocking this extension's requests (CORS).</p>
       <p><strong>Fix — run this as one complete command, keep the terminal open:</strong></p>
@@ -132,7 +260,7 @@ function showErrorDetails(error: string, details?: any): void {
       <p style="font-size:12px;color:#666;">After that, plain <code>ollama serve</code> will always allow this extension.</p>
       <p style="margin-top:10px;"><strong>Then:</strong> Click <em>Next</em> again to retry parsing, or go back to the AI Setup step to re-test the connection.</p>
     `;
-  } else if (isOfflineError) {
+  } else if (errorKind === 'offline') {
     html += `
       <p><strong>Cause:</strong> Cannot reach Ollama. Make sure it is installed and running.</p>
       <p><strong>Fix:</strong></p>
@@ -430,33 +558,22 @@ async function readFileAsText(file: File): Promise<string> {
  * Extract text from PDF using PDF.js
  */
 async function extractTextFromPDF(file: File): Promise<string> {
+  if (typeof pdfjsLib === 'undefined') {
+    throw new Error('PDF.js library failed to load. Please reload the page and try again.');
+  }
+
   try {
-    // Configure PDF.js worker if not already set
-    if (typeof pdfjsLib !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = browser.runtime.getURL('pdf.worker.mjs');
-    }
-    
+    // Do NOT set workerSrc to a URL. The matching pdf.worker.min.js is loaded
+    // via a <script> tag in onboarding.html, which sets globalThis.pdfjsWorker.
+    // pdf.js detects that global and uses main-thread processing automatically,
+    // avoiding Web Worker creation entirely. This is critical because Firefox
+    // blocks Worker creation in store-installed extensions (stricter CSP).
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+
     updateProgress('extract', 30, 'Loading PDF...');
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    
-    let fullText = '';
-    const totalPages = pdf.numPages;
-    
-    // Extract text from all pages
-    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-      const progress = 30 + Math.floor((pageNum / totalPages) * 20);
-      updateProgress('extract', progress, `Extracting text from page ${pageNum}/${totalPages}...`);
-      
-      const page = await pdf.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      fullText += pageText + '\n\n';
-    }
-    
-    return fullText.trim();
+    return await extractPagesText(pdf);
   } catch (err) {
     console.error('PDF extraction failed:', err);
     throw new Error('Failed to extract text from PDF: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -2083,20 +2200,28 @@ async function init(): Promise<void> {
       try {
         // Stage 1: Reading file
         updateProgress('read', 10, 'Reading file...');
+        showLiveFeed();
+        appendFeedLine('Starting resume analysis...', 'stage-label');
         
         // Stage 2: Extract text from file
         const resumeText = await extractTextFromFile(uploadedFile);
         updateProgress('extract', 50, 'Text extraction complete');
+
+        // Stream the extracted text word-by-word to give live visual feedback
+        streamTextToFeed(resumeText);
         
-        // Stage 3: Parse with AI
+        // Stage 3: Parse with AI — start listening for background progress
+        startProgressListener();
         const profile = await parseResume(resumeText);
+        stopProgressListener();
         profile.resumeText = resumeText;
         
         extractedProfile = profile;
         
         // Stage 4: Complete
         updateProgress('done', 100, 'All done!');
-        await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause to show completion
+        appendFeedLine('Profile parsed successfully!', 'done-line');
+        await new Promise(resolve => setTimeout(resolve, 800));
         
         // Show Ollama setup step (which then leads to review)
         hideProgress();
@@ -2104,6 +2229,7 @@ async function init(): Promise<void> {
         showStep('step-ollama');
         checkOllamaConnection();
       } catch (err) {
+        stopProgressListener();
         hideProgress();
         showStatus('error', err instanceof Error ? err.message : 'Failed to parse resume');
         parseBtn.disabled = false;

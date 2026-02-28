@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" sizes="48x48" href="../icons/icon-48.png">
   <title>Application Dashboard - Offlyn Apply</title>
+  <script src="../shared/theme-init.js"></script>
   <script src="chart.umd.min.js"></script>
   <style>
     * {
@@ -614,6 +615,94 @@
         grid-template-columns: 1fr;
       }
     }
+
+    /* ── Dark mode toggle button ── */
+    .dark-mode-toggle {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      background: transparent;
+      border: 1px solid #e2e8f0;
+      cursor: pointer; color: #64748b;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .dark-mode-toggle:hover { background: #f1f5f9; color: #1e293b; border-color: #cbd5e1; }
+
+    /* ── Dark mode overrides ── */
+    html.dark body { background: #0f172a; color: #f1f5f9; }
+
+    /* Header */
+    html.dark .header { background: #1e293b; border-bottom-color: #334155; }
+    html.dark .header-brand h1 { color: #f1f5f9; }
+    html.dark .dark-mode-toggle { border-color: #334155; color: #94a3b8; }
+    html.dark .dark-mode-toggle:hover { background: #334155; color: #f1f5f9; }
+    html.dark .btn-learned { background: #263346; border-color: #334155; color: #94a3b8; }
+    html.dark .btn-learned:hover { background: #334155; color: #f1f5f9; }
+    html.dark .btn-back { background: #1e293b; border-color: #334155; color: #94a3b8; }
+    html.dark .btn-back:hover { background: #263346; color: #f1f5f9; }
+
+    /* Stats */
+    html.dark .stat-card { background: #1e293b; border-color: #334155; }
+    html.dark .stat-card .number { color: #f1f5f9; }
+    html.dark .stat-card .label { color: #94a3b8; }
+
+    /* Charts — .chart-card is the card wrapper, .chart-container is the canvas wrapper */
+    html.dark .chart-card { background: #1e293b; border-color: #334155; }
+    html.dark .chart-card h3 { color: #f1f5f9; }
+    html.dark .chart-container { background: #1e293b; }
+
+    /* Toolbar (search / filter / export) — actual class is .toolbar, not .search-filter-bar */
+    html.dark .toolbar { background: transparent; }
+    html.dark .toolbar-search input { background: #1e293b; border-color: #334155; color: #f1f5f9; }
+    html.dark .toolbar-search input::placeholder { color: #475569; }
+    html.dark .toolbar-search svg { color: #475569; }
+    html.dark .toolbar-filter select { background: #1e293b; border-color: #334155; color: #f1f5f9; }
+    html.dark .btn-export { background: #166534; }
+    html.dark .btn-export:hover { background: #15803d; }
+    html.dark .btn-test-data { background: #92400e; color: #fef3c7; }
+    html.dark .btn-test-data:hover { background: #b45309; }
+    html.dark .btn-clear-data { border-color: #7f1d1d; color: #fca5a5; }
+    html.dark .btn-clear-data:hover { background: #1c1111; }
+
+    /* Kanban columns — actual classes: .kanban-column, .column-header, .column-cards */
+    html.dark .kanban-column { background: transparent; }
+    html.dark .column-header { background: #1e293b; color: #f1f5f9; border-color: #334155; }
+    html.dark .column-header .count { background: #263346; color: #94a3b8; }
+    html.dark .column-cards { background: #162032; }
+
+    /* Application cards — actual class is .app-card, not .kanban-card */
+    html.dark .app-card { background: #1e293b; border-color: #334155; }
+    html.dark .app-card:hover { background: #263346; }
+    html.dark .app-card-title { color: #f1f5f9; }
+    html.dark .app-card-company { color: #94a3b8; }
+    html.dark .app-card-meta { color: #64748b; }
+    html.dark .app-card-meta div[style] { color: #94a3b8 !important; }
+    html.dark .ats-badge { background: #263346; color: #94a3b8; border-color: #334155; }
+    html.dark .btn-edit { background: #1e293b; color: #94a3b8; border-color: #334155; }
+    html.dark .btn-edit:hover { background: #334155; color: #f1f5f9; }
+    html.dark .btn-delete { background: #1e293b; color: #f87171; border-color: #7f1d1d; }
+    html.dark .btn-delete:hover { background: #2d1515; }
+
+    /* Empty / drag states */
+    html.dark .empty-state { color: #64748b; }
+    html.dark .kanban-column.drag-over .column-cards { background: #162e1a; outline-color: #166534; }
+
+    /* Edit modal */
+    html.dark .modal { background: rgba(0,0,0,0.7); }
+    html.dark .modal-content { background: #1e293b; border-color: #334155; }
+    html.dark .modal-content h2 { color: #f1f5f9; }
+    html.dark .form-group label { color: #94a3b8; }
+    html.dark .form-group input,
+    html.dark .form-group select,
+    html.dark .form-group textarea { background: #0f172a; border-color: #334155; color: #f1f5f9; }
+    html.dark .form-group input:focus,
+    html.dark .form-group select:focus,
+    html.dark .form-group textarea:focus { border-color: #27E38D; }
+
+    /* Date range / misc */
+    html.dark .section-title { color: #f1f5f9; }
+    html.dark #dateRange { color: #64748b; }
   </style>
 </head>
 <body>
@@ -625,6 +714,7 @@
         <h1>Application Dashboard</h1>
       </div>
       <div class="header-actions">
+        <button id="dark-mode-toggle" class="dark-mode-toggle" aria-label="Toggle dark mode"></button>
         <button id="viewLearnedValuesBtn" class="btn-learned">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
           Learned Values
@@ -702,9 +792,6 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Export CSV
       </button>
-      <button class="btn-test-data" id="generateTestDataBtn" title="Generate sample data for testing">
-        Generate Test Data
-      </button>
       <button class="btn-clear-data" id="clearDataBtn" title="Clear all application data">
         Clear All Data
       </button>
@@ -757,5 +844,6 @@
   </div>
 
   <script src="dashboard.js"></script>
+  <script src="../shared/dark-mode.js"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
  */
 
 import type { PopupState } from '../shared/types';
-import { getSettings, setSettings, getTodayApplications, getAllApplications, generateSummaryMessage } from '../shared/storage';
+import { getSettings, setSettings, getTodayApplications, generateSummaryMessage } from '../shared/storage';
 import { log, error } from '../shared/log';
 import { getUserProfile, checkProfileCompleteness } from '../shared/profile';
 import { setHTML } from '../shared/html';
@@ -60,20 +60,11 @@ function updateUI(): void {
   }
 }
 
-async function updateStats(): Promise<void> {
-  try {
-    // getAllApplications already filters out 'detected' and returns all-time data
-    const apps = await getAllApplications();
-    const total = apps.length;
-    const interviewing = apps.filter(a => a.status === 'interviewing').length;
-
-    const totalEl = document.getElementById('stat-total');
-    const interviewingEl = document.getElementById('stat-interviewing');
-    if (totalEl) totalEl.textContent = String(total);
-    if (interviewingEl) interviewingEl.textContent = String(interviewing);
-  } catch (err) {
-    error('Failed to update stats:', err);
-  }
+function updateStats(total: number, interviewing: number): void {
+  const totalEl = document.getElementById('stat-total');
+  const interviewingEl = document.getElementById('stat-interviewing');
+  if (totalEl) totalEl.textContent = String(total);
+  if (interviewingEl) interviewingEl.textContent = String(interviewing);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -97,7 +88,8 @@ async function requestState(): Promise<void> {
         lastJob: response.lastJob ?? currentState.lastJob,
       };
       updateUI();
-      updateStats();
+      // Stats come from background (reliable storage access)
+      updateStats(response.statTotal ?? 0, response.statInterviewing ?? 0);
     }
   } catch (err) {
     error('Failed to request state:', err);
@@ -303,17 +295,19 @@ async function init(): Promise<void> {
           lastJob: update.lastJob ?? currentState.lastJob,
         };
         updateUI();
-        updateStats();
+        const upd = update as any;
+        updateStats(upd.statTotal ?? 0, upd.statInterviewing ?? 0);
       }
     }
   });
 
   // Initial render
   updateUI();
-  updateStats();
+  // Stats are loaded via requestState() → background reads storage
+  requestState();
 
-  // Poll
-  setInterval(() => { requestState(); updateStats(); }, 3000);
+  // Poll every 3s — background will return fresh stats each time
+  setInterval(() => requestState(), 3000);
 
   log('Popup initialized');
 }

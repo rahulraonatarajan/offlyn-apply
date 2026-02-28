@@ -3,11 +3,12 @@
  */
 
 import type { ApplyEvent, TabJobInfo, JobApplication } from './shared/types';
-import { getSettings, setTabJobInfo, addJobApplication } from './shared/storage';
+import { getSettings, setTabJobInfo, addJobApplication, getAllApplications } from './shared/storage';
 import { log, info, warn, error } from './shared/log';
 import { sendDailySummary } from './shared/whatsapp';
 import { mastraAgent as ollama } from './shared/mastra-agent';
 import { ragParser } from './shared/rag-parser';
+import { enrichParseErrorMessage } from './shared/error-classify';
 
 interface ConnectionState {
   connected: boolean;
@@ -44,7 +45,6 @@ const GENERIC_JOB_TITLES = new Set([
   'apply for this position',
   'apply for this role',
   'apply for job',
-  'easy apply',
   'quick apply',
 ]);
 
@@ -62,6 +62,15 @@ const GENERIC_COMPANY_NAMES = new Set([
   'talent',
   'hr',
   'human resources',
+  'greenhouse',  // ATS provider names, not actual companies
+  'lever',
+  'workday',
+  'ashby',
+  'bamboohr',
+  'icims',
+  'smartrecruiters',
+  'taleo',
+  'boards',
 ]);
 
 /**
@@ -144,6 +153,15 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
       const resumeText = (message as any).resumeText;
       
       info('Parsing resume with Ollama, length:', resumeText?.length);
+
+      const broadcastProgress = (stage: string, percent: number, detail?: string) => {
+        browser.runtime.sendMessage({
+          kind: 'PARSE_PROGRESS',
+          stage,
+          percent,
+          detail: detail || '',
+        }).catch(() => {});
+      };
       
       try {
         // Check if user wants RAG parsing (default: true for better accuracy)
@@ -155,8 +173,9 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
           info('Using RAG-based parsing for higher accuracy...');
           
           // Parse with RAG
-          profile = await ragParser.parseResume(resumeText, (stage, percent) => {
+          profile = await ragParser.parseResume(resumeText, (stage, percent, detail) => {
             info(`RAG parsing: ${stage} (${percent}%)`);
+            broadcastProgress(stage, percent, detail);
           });
           
           info('Successfully parsed profile with RAG');
@@ -166,6 +185,7 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
           // Fallback to legacy parser
           profile = await ollama.parseResume(resumeText, (stage, percent) => {
             info(`Parsing progress: ${stage} (${percent}%)`);
+            broadcastProgress(stage, percent);
           });
           
           info('Successfully parsed profile with chunking');
@@ -197,10 +217,9 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
           }
         }
         
-        let messageText = err instanceof Error ? err.message : 'Failed to parse resume';
-        if (messageText.includes('403') || messageText.includes('Forbidden')) {
-          messageText += ' Ollama is blocking the extension. Restart Ollama with: OLLAMA_ORIGINS=\'moz-extension://*\' ollama serve (see OLLAMA_CORS_FIX.md)';
-        }
+        const messageText = enrichParseErrorMessage(
+          err instanceof Error ? err.message : 'Failed to parse resume',
+        );
         
         return {
           kind: 'ERROR',
@@ -292,31 +311,59 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
           url: event.jobMeta.url,
         });
 
-        if (!event.jobMeta.jobTitle) {
-          console.warn('[Background] Skipping application - missing jobTitle');
-        }
-        if (!event.jobMeta.company) {
-          console.warn('[Background] Skipping application - missing company');
+        // Use fallbacks instead of silently dropping — a missing title or company
+        // from a poorly-structured ATS page should still be tracked.
+        let jobTitle = event.jobMeta.jobTitle;
+        let company = event.jobMeta.company;
+
+        if (!jobTitle) {
+          console.warn('[Background] Missing jobTitle - using fallback');
+          // Derive from URL path: /jobs/software-engineer → "software engineer"
+          try {
+            const pathParts = new URL(event.jobMeta.url).pathname.split('/').filter(Boolean);
+            const lastPart = pathParts[pathParts.length - 1];
+            jobTitle = lastPart ? lastPart.replace(/[-_]/g, ' ') : 'Unknown Position';
+          } catch {
+            jobTitle = 'Unknown Position';
+          }
         }
 
-        if (event.jobMeta.jobTitle && event.jobMeta.company) {
-          // Skip generic/garbage titles that come from job board listing pages
-          // rather than the actual ATS application form
-          if (isGenericJobEntry(event.jobMeta.jobTitle, event.jobMeta.company)) {
-            console.warn('[Background] Skipping generic/invalid entry:', event.jobMeta.jobTitle, 'at', event.jobMeta.company);
-          } else {
-            const app: JobApplication = {
-              jobTitle: event.jobMeta.jobTitle,
-              company: event.jobMeta.company,
-              url: event.jobMeta.url,
-              atsHint: event.jobMeta.atsHint,
-              timestamp: Date.now(),
-              status: 'submitted',
-            };
-            await addJobApplication(app);
-            console.log('[Background] Application tracked:', app.jobTitle, 'at', app.company);
-            log(`Tracked submitted application:`, app.jobTitle, 'at', app.company);
+        if (!company) {
+          console.warn('[Background] Missing company - using fallback');
+          try {
+            const parsedUrl = new URL(event.jobMeta.url);
+            const hostname = parsedUrl.hostname.toLowerCase();
+            const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
+            // For shared ATS boards, company is the first path segment
+            if (hostname === 'job-boards.greenhouse.io' || hostname === 'boards.greenhouse.io' || hostname === 'jobs.lever.co') {
+              company = pathParts[0] || 'Unknown Company';
+            } else {
+              const parts = hostname.replace(/^www\./, '').split('.');
+              const GENERIC_SUBDOMAINS = new Set(['careers', 'jobs', 'hiring', 'apply', 'work', 'talent', 'recruit', 'hr', 'job', 'career', 'boards', 'job-boards']);
+              const companyPart = parts.find(p => !GENERIC_SUBDOMAINS.has(p.toLowerCase()) && p !== 'com' && p !== 'io' && p !== 'net' && p !== 'org' && p !== 'co' && p.length > 1);
+              company = companyPart || parts[0] || 'Unknown Company';
+            }
+          } catch {
+            company = 'Unknown Company';
           }
+        }
+
+        // Skip generic/garbage titles that come from job board listing pages
+        // rather than the actual ATS application form
+        if (isGenericJobEntry(jobTitle, company)) {
+          console.warn('[Background] Skipping generic/invalid entry:', jobTitle, 'at', company);
+        } else {
+          const app: JobApplication = {
+            jobTitle,
+            company,
+            url: event.jobMeta.url,
+            atsHint: event.jobMeta.atsHint,
+            timestamp: Date.now(),
+            status: 'submitted',
+          };
+          await addJobApplication(app);
+          console.log('[Background] Application tracked:', app.jobTitle, 'at', app.company);
+          log(`Tracked submitted application:`, app.jobTitle, 'at', app.company);
         }
       }
       
@@ -363,6 +410,17 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
       if (!connectionState.connected) {
         await checkOllamaConnection();
       }
+
+      // Read application stats in background context (reliable storage access)
+      let statTotal = 0;
+      let statInterviewing = 0;
+      try {
+        const apps = await getAllApplications();
+        statTotal = apps.length;
+        statInterviewing = apps.filter(a => a.status === 'interviewing').length;
+      } catch {
+        // Non-fatal — stats stay at 0
+      }
       
       return {
         kind: 'STATE_UPDATE',
@@ -371,6 +429,8 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
         nativeHostConnected: connectionState.connected,
         lastError: connectionState.lastError,
         lastJob,
+        statTotal,
+        statInterviewing,
       };
     }
     

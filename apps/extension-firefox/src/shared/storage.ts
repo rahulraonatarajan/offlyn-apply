@@ -103,23 +103,43 @@ export async function getTodayApplications(): Promise<DailySummary> {
 }
 
 /**
+ * Normalize a job URL for deduplication: strip tracking query params
+ * (gh_src, lever-source, utm_*, ref, etc.) so the same job doesn't get
+ * recorded twice because the tracking token changed between sessions.
+ */
+function normalizeJobUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const TRACKING_PARAMS = ['gh_src', 'lever-source', 'lever-origin', 'ref', 'source',
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    TRACKING_PARAMS.forEach(p => u.searchParams.delete(p));
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Add a job application to today's summary
  */
 export async function addJobApplication(app: JobApplication): Promise<void> {
   try {
     console.log('[Storage] Adding application:', app.jobTitle, 'at', app.company);
     const summary = await getTodayApplications();
+
+    const normalizedNew = normalizeJobUrl(app.url);
     
-    // Check if this job already exists (by URL)
-    const exists = summary.applications.some(a => a.url === app.url);
-    if (exists) {
-      console.log('[Storage] Application already exists, updating status');
-      // Update status if it's a submission
-      if (app.status === 'submitted') {
-        summary.applications = summary.applications.map(a => 
-          a.url === app.url ? { ...a, status: 'submitted', timestamp: app.timestamp } : a
-        );
-      }
+    // Check if this job already exists today (normalize URLs to strip tracking params)
+    const existing = summary.applications.find(a => normalizeJobUrl(a.url) === normalizedNew);
+    if (existing) {
+      console.log('[Storage] Application already exists today, updating status/title');
+      summary.applications = summary.applications.map(a =>
+        normalizeJobUrl(a.url) === normalizedNew
+          ? { ...a, status: app.status, timestamp: app.timestamp,
+              jobTitle: app.jobTitle || a.jobTitle,
+              company: app.company || a.company }
+          : a
+      );
     } else {
       summary.applications.push(app);
       console.log('[Storage] New application added. Total today:', summary.applications.length);

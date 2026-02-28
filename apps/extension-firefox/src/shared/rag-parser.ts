@@ -119,21 +119,23 @@ export class RAGResumeParser {
   /**
    * Initialize RAG context with embeddings
    */
-  async initializeContext(resumeText: string, onProgress?: (stage: string, percent: number) => void): Promise<void> {
+  async initializeContext(resumeText: string, onProgress?: (stage: string, percent: number, detail?: string) => void): Promise<void> {
     console.log('[RAG] Initializing RAG context...');
-    onProgress?.('Creating semantic chunks...', 60);
+    onProgress?.('Creating semantic chunks...', 60, 'Splitting resume into logical sections');
 
     // Semantic chunking
     const semanticChunks = this.semanticChunk(resumeText);
     console.log(`[RAG] Created ${semanticChunks.length} semantic chunks`);
+    onProgress?.(`Found ${semanticChunks.length} sections`, 62, semanticChunks.slice(0, 3).map(c => c.text.split('\n')[0]).join(' | '));
 
     // Create embeddings for each chunk
-    onProgress?.('Generating embeddings...', 65);
+    onProgress?.('Generating embeddings...', 65, 'Converting text to vector representations');
     const chunks: ResumeChunk[] = [];
 
     for (let i = 0; i < semanticChunks.length; i++) {
       const chunk = semanticChunks[i];
-      
+      const preview = chunk.text.substring(0, 80).replace(/\n/g, ' ').trim();
+
       try {
         const embedding = await ollama.createEmbedding(chunk.text);
         const keywords = this.extractKeywords(chunk.text);
@@ -148,9 +150,8 @@ export class RAGResumeParser {
           },
         });
 
-        if ((i + 1) % 5 === 0) {
-          onProgress?.(`Embeddings: ${i + 1}/${semanticChunks.length}`, 65 + (i / semanticChunks.length) * 10);
-        }
+        const pct = 65 + ((i + 1) / semanticChunks.length) * 10;
+        onProgress?.(`Embedding ${i + 1}/${semanticChunks.length}`, pct, preview);
       } catch (err) {
         console.warn(`[RAG] Failed to create embedding for chunk ${i}:`, err);
       }
@@ -179,7 +180,7 @@ export class RAGResumeParser {
       console.warn('[RAG] Failed to store RAG context:', err);
     }
 
-    onProgress?.('RAG context ready', 75);
+    onProgress?.('RAG context ready', 75, `${chunks.length} chunks indexed and ready`);
   }
 
   /**
@@ -282,7 +283,7 @@ Return ONLY the JSON (no markdown, no explanations):`;
   /**
    * Parse entire resume using RAG
    */
-  async parseResume(resumeText: string, onProgress?: (stage: string, percent: number) => void): Promise<any> {
+  async parseResume(resumeText: string, onProgress?: (stage: string, percent: number, detail?: string) => void): Promise<any> {
     console.log('[RAG] Starting RAG-based resume parsing...');
 
     // Initialize context
@@ -300,7 +301,7 @@ Return ONLY the JSON (no markdown, no explanations):`;
     };
 
     // 1. Extract personal information
-    onProgress?.('Extracting personal info...', 76);
+    onProgress?.('Extracting personal info...', 76, 'Searching for name, email, phone, location');
     const personalQuery = 'contact information name email phone location address';
     const personalData = await this.extractWithRAG(
       personalQuery,
@@ -308,10 +309,14 @@ Return ONLY the JSON (no markdown, no explanations):`;
 Return JSON: {"firstName":"","lastName":"","email":"","phone":"","location":""}`,
       3
     );
-    if (personalData) profile.personal = personalData;
+    if (personalData) {
+      profile.personal = personalData;
+      const found = Object.entries(personalData).filter(([, v]) => v).map(([k]) => k);
+      onProgress?.('Personal info extracted', 78, found.length ? `Found: ${found.join(', ')}` : 'Parsing contact details...');
+    }
 
     // 2. Extract professional links
-    onProgress?.('Extracting professional links...', 78);
+    onProgress?.('Extracting professional links...', 79, 'Scanning for LinkedIn, GitHub, portfolio URLs');
     const professionalQuery = 'linkedin github portfolio website profile links social media';
     const professionalData = await this.extractWithRAG(
       professionalQuery,
@@ -319,10 +324,14 @@ Return JSON: {"firstName":"","lastName":"","email":"","phone":"","location":""}`
 Return JSON: {"linkedin":"","github":"","portfolio":"","yearsOfExperience":0}`,
       3
     );
-    if (professionalData) profile.professional = professionalData;
+    if (professionalData) {
+      profile.professional = professionalData;
+      const links = [professionalData.linkedin && 'LinkedIn', professionalData.github && 'GitHub', professionalData.portfolio && 'Portfolio'].filter(Boolean);
+      onProgress?.('Links extracted', 80, links.length ? `Found: ${links.join(', ')}` : 'No links detected');
+    }
 
     // 3. Extract skills
-    onProgress?.('Extracting skills...', 80);
+    onProgress?.('Extracting skills...', 81, 'Identifying technologies, tools, and competencies');
     const skillsQuery = 'skills technologies tools programming languages frameworks competencies expertise';
     const skillsData = await this.extractWithRAG(
       skillsQuery,
@@ -332,10 +341,12 @@ Return JSON array: ["skill1","skill2","tool1","language1"]`,
     );
     if (skillsData && Array.isArray(skillsData)) {
       profile.skills = skillsData;
+      const preview = skillsData.slice(0, 6).join(', ');
+      onProgress?.(`Found ${skillsData.length} skills`, 83, preview + (skillsData.length > 6 ? '...' : ''));
     }
 
     // 4. Extract work experience
-    onProgress?.('Extracting work experience...', 83);
+    onProgress?.('Extracting work experience...', 84, 'Analyzing employment history, roles, and achievements');
     const workQuery = 'work experience employment job history positions roles responsibilities duties achievements';
     const workData = await this.extractWithRAG(
       workQuery,
@@ -346,10 +357,12 @@ Return JSON array: [{"company":"","title":"","startDate":"","endDate":"","curren
     );
     if (workData && Array.isArray(workData)) {
       profile.work = workData;
+      const jobs = workData.map((j: any) => `${j.title} @ ${j.company}`).slice(0, 3);
+      onProgress?.(`Found ${workData.length} positions`, 87, jobs.join(' | '));
     }
 
     // 5. Extract education
-    onProgress?.('Extracting education...', 86);
+    onProgress?.('Extracting education...', 88, 'Looking for degrees, schools, and graduation dates');
     const educationQuery = 'education academic background degrees university college school graduation';
     const educationData = await this.extractWithRAG(
       educationQuery,
@@ -359,10 +372,12 @@ Return JSON array: [{"school":"","degree":"","field":"","graduationYear":""}]`,
     );
     if (educationData && Array.isArray(educationData)) {
       profile.education = educationData;
+      const edu = educationData.map((e: any) => `${e.degree} - ${e.school}`).slice(0, 2);
+      onProgress?.(`Found ${educationData.length} entries`, 90, edu.join(' | '));
     }
 
     // 6. Extract certifications
-    onProgress?.('Extracting certifications...', 89);
+    onProgress?.('Extracting certifications...', 91, 'Scanning for certificates and licenses');
     const certificationsQuery = 'certifications certificates licenses credentials professional certifications';
     const certificationsData = await this.extractWithRAG(
       certificationsQuery,
@@ -372,10 +387,11 @@ Return JSON array of strings: ["AWS Certified Developer","PMP","Security+"]`,
     );
     if (certificationsData && Array.isArray(certificationsData)) {
       profile.certifications = certificationsData;
+      onProgress?.(`Found ${certificationsData.length} certifications`, 93, certificationsData.slice(0, 4).join(', '));
     }
 
     // 7. Extract projects
-    onProgress?.('Extracting projects...', 92);
+    onProgress?.('Extracting projects...', 94, 'Finding project highlights and contributions');
     const projectsQuery = 'projects portfolio work side projects open source contributions';
     const projectsData = await this.extractWithRAG(
       projectsQuery,
@@ -385,10 +401,12 @@ Return JSON array: [{"name":"","description":"","technologies":[]}]`,
     );
     if (projectsData && Array.isArray(projectsData)) {
       profile.projects = projectsData;
+      const names = projectsData.map((p: any) => p.name).filter(Boolean).slice(0, 3);
+      onProgress?.(`Found ${projectsData.length} projects`, 96, names.join(', '));
     }
 
     // 8. Generate summary using most relevant chunks
-    onProgress?.('Generating summary...', 95);
+    onProgress?.('Generating summary...', 97, 'Composing a professional overview');
     const summaryQuery = 'professional summary profile overview career objective background';
     const summaryChunks = await this.retrieveRelevantChunks(summaryQuery, 3);
     const summaryContext = summaryChunks.map(c => c.text).join('\n');
@@ -399,11 +417,12 @@ Return JSON array: [{"name":"","description":"","technologies":[]}]`,
         { role: 'user', content: `Resume excerpt:\n${summaryContext}` },
       ], { temperature: 0.3 });
       profile.summary = summaryResponse.trim();
+      onProgress?.('Summary generated', 99, profile.summary.substring(0, 100) + '...');
     } catch {
       profile.summary = 'Experienced professional with diverse skills and achievements.';
     }
 
-    onProgress?.('RAG parsing complete', 100);
+    onProgress?.('RAG parsing complete', 100, 'All sections extracted successfully');
     console.log('[RAG] Parsing complete');
     console.log('[RAG] Extracted:', {
       personalFields: Object.keys(profile.personal).length,

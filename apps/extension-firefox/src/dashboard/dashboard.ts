@@ -86,9 +86,6 @@ function setupEventListeners() {
   cancelEditBtn?.addEventListener('click', closeEditModal);
 
   // Test data buttons
-  const generateTestDataBtn = document.getElementById('generateTestDataBtn');
-  generateTestDataBtn?.addEventListener('click', generateTestData);
-
   const clearDataBtn = document.getElementById('clearDataBtn');
   clearDataBtn?.addEventListener('click', clearAllData);
 
@@ -447,6 +444,31 @@ async function renderCharts() {
 }
 
 /**
+ * Returns true when dark mode is active (html.dark class present)
+ */
+function isDarkMode(): boolean {
+  return document.documentElement.classList.contains('dark');
+}
+
+/**
+ * Chart theme colours — swaps based on current dark/light mode
+ */
+function chartTheme() {
+  const dark = isDarkMode();
+  return {
+    gridColor: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    tickColor: dark ? '#94a3b8' : '#64748b',
+    legendColor: dark ? '#cbd5e1' : '#334155',
+    totalLine: dark ? '#7dd3fc' : '#1e2a3a',
+    totalFill: dark ? 'rgba(125,211,252,0.08)' : 'rgba(30,42,58,0.07)',
+    submittedLine: '#4299e1',
+    submittedFill: 'rgba(66,153,225,0.1)',
+    interviewingLine: '#ed8936',
+    interviewingFill: 'rgba(237,137,54,0.1)',
+  };
+}
+
+/**
  * Render applications over time chart
  */
 function renderTrendChart(trends: DailyTrend[]) {
@@ -456,32 +478,34 @@ function renderTrendChart(trends: DailyTrend[]) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   
+  const t = chartTheme();
+
   trendChart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: trends.map(t => formatDate(t.date)),
+      labels: trends.map(d => formatDate(d.date)),
       datasets: [
         {
           label: 'Total',
-          data: trends.map(t => t.total),
-          borderColor: '#1e2a3a',
-          backgroundColor: 'rgba(30, 42, 58, 0.1)',
+          data: trends.map(d => d.total),
+          borderColor: t.totalLine,
+          backgroundColor: t.totalFill,
           tension: 0.4,
           fill: true,
         },
         {
           label: 'Submitted',
-          data: trends.map(t => t.submitted),
-          borderColor: '#4299e1',
-          backgroundColor: 'rgba(66, 153, 225, 0.1)',
+          data: trends.map(d => d.submitted),
+          borderColor: t.submittedLine,
+          backgroundColor: t.submittedFill,
           tension: 0.4,
           fill: true,
         },
         {
           label: 'Interviewing',
-          data: trends.map(t => t.interviewing),
-          borderColor: '#ed8936',
-          backgroundColor: 'rgba(237, 137, 54, 0.1)',
+          data: trends.map(d => d.interviewing),
+          borderColor: t.interviewingLine,
+          backgroundColor: t.interviewingFill,
           tension: 0.4,
           fill: true,
         },
@@ -494,14 +518,18 @@ function renderTrendChart(trends: DailyTrend[]) {
         legend: {
           display: true,
           position: 'top',
+          labels: { color: t.legendColor },
         },
       },
       scales: {
+        x: {
+          ticks: { color: t.tickColor },
+          grid: { color: t.gridColor },
+        },
         y: {
           beginAtZero: true,
-          ticks: {
-            stepSize: 1,
-          },
+          ticks: { stepSize: 1, color: t.tickColor },
+          grid: { color: t.gridColor },
         },
       },
     },
@@ -517,6 +545,8 @@ function renderStatusChart() {
   
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+
+  const t = chartTheme();
   
   const submitted = allApplications.filter(a => a.status === 'submitted').length;
   const interviewing = allApplications.filter(a => a.status === 'interviewing').length;
@@ -544,7 +574,7 @@ function renderStatusChart() {
           '#48bb78',
           '#a0aec0',
         ],
-        borderWidth: 2,
+        borderWidth: isDarkMode() ? 0 : 2,
       }],
     },
     options: {
@@ -554,6 +584,7 @@ function renderStatusChart() {
         legend: {
           display: true,
           position: 'bottom',
+          labels: { color: t.legendColor },
         },
       },
     },
@@ -664,74 +695,7 @@ function showError(message: string) {
 }
 
 /**
- * Generate realistic test data for development/demo
- */
-async function generateTestData() {
-  console.log('[Dashboard] Generating test data...');
-
-  const companies = [
-    'TechCorp', 'DataBricks', 'StartupXYZ', 'MegaCorp', 'InnovateLabs',
-    'CloudServices Inc', 'AI Solutions', 'DevTools Co', 'AppMakers', 'CodeFactory',
-  ];
-
-  const positions = [
-    'Software Engineer', 'Senior Frontend Developer', 'Backend Engineer',
-    'Full Stack Developer', 'DevOps Engineer', 'Data Scientist',
-    'Product Manager', 'UX Designer', 'Engineering Manager', 'Staff Engineer',
-  ];
-
-  const atsHints = ['Lever', 'Greenhouse', 'Workday', 'LinkedIn', null];
-  const statuses: JobApplication['status'][] = [
-    'submitted', 'submitted', 'submitted', 'submitted', // More submitted
-    'interviewing', 'interviewing',
-    'rejected',
-    'accepted',
-  ];
-
-  try {
-    const count = 12;
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-
-    for (let i = 0; i < count; i++) {
-      const daysAgo = Math.floor(Math.random() * 30);
-      const timestamp = now - (daysAgo * dayMs);
-      const date = new Date(timestamp).toISOString().split('T')[0];
-
-      const app: JobApplication = {
-        jobTitle: positions[Math.floor(Math.random() * positions.length)],
-        company: companies[Math.floor(Math.random() * companies.length)],
-        url: `https://jobs.example.com/test-${timestamp}-${i}`,
-        atsHint: atsHints[Math.floor(Math.random() * atsHints.length)] ?? null,
-        timestamp,
-        status: statuses[Math.floor(Math.random() * statuses.length)],
-        id: `test_${timestamp}_${i}`,
-        notes: Math.random() > 0.7 ? 'Follow up next week' : undefined,
-      };
-
-      const key = `dailySummary_${date}`;
-      const existing = await browser.storage.local.get(key);
-      const summary = existing[key] || { date, applications: [], lastSentAt: null };
-
-      // Avoid duplicate URLs
-      if (!summary.applications.some((a: JobApplication) => a.url === app.url)) {
-        summary.applications.push(app);
-        await browser.storage.local.set({ [key]: summary });
-      }
-    }
-
-    console.log('[Dashboard] Generated', count, 'test applications');
-
-    // Reload page to cleanly re-initialize with new data
-    location.reload();
-  } catch (err) {
-    console.error('[Dashboard] Failed to generate test data:', err);
-    showError('Failed to generate test data');
-  }
-}
-
-/**
- * Clear all application data (useful for testing)
+ * Clear all application data
  */
 async function clearAllData() {
   const confirmed = confirm(
@@ -762,38 +726,10 @@ async function clearAllData() {
   }
 }
 
-/**
- * Show a temporary success notification
- */
-function showSuccess(message: string) {
-  // Reuse the error container area with success styling
-  const existing = document.getElementById('successToast');
-  if (existing) existing.remove();
-
-  const toast = document.createElement('div');
-  toast.id = 'successToast';
-  toast.style.cssText = `
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    background: #0F172A;
-    color: #27E38D;
-    padding: 14px 20px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-    z-index: 9999;
-    transition: opacity 0.3s;
-  `;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    setTimeout(() => toast.remove(), 300);
-  }, 2500);
-}
+// Re-render charts when dark/light mode is toggled so colours update live
+new MutationObserver(() => {
+  renderCharts();
+}).observe(document.documentElement, { attributeFilter: ['class'] });
 
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {

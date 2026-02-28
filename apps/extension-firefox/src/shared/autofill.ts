@@ -230,6 +230,42 @@ function generateWhyAnswer(field: FieldSchema, profile: UserProfile): string | n
 }
 
 /**
+ * Resolve whether a user profile identifies as Hispanic/Latino.
+ *
+ * Exported so other modules (e.g. browser-use-actions) can reuse the same
+ * negation-safe logic without duplicating it.
+ *
+ * `collectSelfIdFromForm` stores the raw radio-button text verbatim, so the
+ * ethnicity value may be a full sentence like "No, not Hispanic or Latino".
+ * A bare `.includes('hispanic')` check would return true for that and produce
+ * the wrong autofill answer — we MUST test for negation explicitly.
+ *
+ * Template: mirrors the disability-check pattern used in the radio/select
+ * handlers below: positive indicator AND explicit no-negation guard.
+ */
+export function resolveIsHispanicLatino(
+  ethnicity: string | undefined,
+  race: string[]
+): boolean {
+  if (ethnicity) {
+    const e = ethnicity.toLowerCase();
+    const hasMention = e.includes('hispanic') || e.includes('latino');
+    // Negation: "No, not Hispanic or Latino", "Not Hispanic or Latino",
+    // "Prefer not to say", etc. — any of these invalidate the positive mention.
+    const isNegated =
+      e.startsWith('no') ||     // "No," or "No, not..."
+      e.includes('not ') ||     // "Not Hispanic", "not hispanic or latino"
+      e.includes('prefer not'); // "Prefer not to say"
+    if (hasMention && !isNegated) return true;
+  }
+  // Fall back to race array (some ATS forms store Hispanic/Latino there)
+  return race.some(r => {
+    const rL = r.toLowerCase();
+    return (rL.includes('hispanic') || rL.includes('latino')) && !rL.includes('not');
+  });
+}
+
+/**
  * Match a form field to profile data
  */
 function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string | boolean | null {
@@ -259,7 +295,24 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
   
   // Last name
   if (matchesAny([label, name, id], ['last', 'lname', 'lastname', 'family', 'surname'])) {
-    return profile.personal.lastName;
+    const storedLast = profile.personal.lastName;
+    // Guard: if the profile's lastName was accidentally stored as a full name (contains a space),
+    // try to extract just the last name. If it starts with the firstName, strip it.
+    // This handles the common onboarding mistake of storing "Firstname Lastname" in the lastName field.
+    if (storedLast && storedLast.includes(' ')) {
+      const firstName = profile.personal.firstName || '';
+      const firstLower = firstName.toLowerCase();
+      const lastLower = storedLast.toLowerCase();
+      if (firstLower && lastLower.startsWith(firstLower + ' ')) {
+        return storedLast.substring(firstName.length + 1).trim();
+      }
+      // Fallback: if it's exactly two words (e.g., "Nishanth Ponukumatla"), return the last word
+      const parts = storedLast.trim().split(/\s+/);
+      if (parts.length === 2) {
+        return parts[1];
+      }
+    }
+    return storedLast;
   }
   
   // Full name
@@ -535,14 +588,9 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
     if (!skipHispanicLatino) {
       console.log('[Autofill] 🏁 Hispanic/Latino field detected (PRIORITY MATCH) - simple Yes/No');
     
-    // Check if user's ethnicity data includes Hispanic/Latino
-    // Prefer the dedicated ethnicity field, fall back to race array for backwards compat
-    const isHispanic = (profile.selfId.ethnicity
-      ? profile.selfId.ethnicity.toLowerCase().includes('hispanic') || profile.selfId.ethnicity.toLowerCase().includes('latino')
-      : false
-    ) || profile.selfId.race.some(r => 
-      r.toLowerCase().includes('hispanic') || r.toLowerCase().includes('latino')
-    );
+    // resolveIsHispanicLatino handles negation-aware checks — see its JSDoc for why
+    // a bare .includes('hispanic') is unsafe on stored ethnicity strings.
+    const isHispanic = resolveIsHispanicLatino(profile.selfId.ethnicity, profile.selfId.race);
     
     // For radio button groups (simple Yes/No only), return the label of the correct option
     if (field.type === 'radio' && (field as any).radioOptions) {
@@ -590,10 +638,9 @@ function matchFieldToProfile(field: FieldSchema, profile: UserProfile): string |
   // Hispanic/Latino question rather than asking for race categories. Handle them separately
   // so we don't accidentally fill them with the user's race value (e.g. "Asian").
   if ((labelLower.includes('ethnicity') || labelLower.includes('ethnic')) && !labelLower.includes('race')) {
-    const isHispanic = (profile.selfId.ethnicity
-      ? (profile.selfId.ethnicity.toLowerCase().includes('hispanic') || profile.selfId.ethnicity.toLowerCase().includes('latino'))
-      : false
-    ) || profile.selfId.race.some(r => r.toLowerCase().includes('hispanic') || r.toLowerCase().includes('latino'));
+    // resolveIsHispanicLatino handles negation-aware checks — see its JSDoc for why
+    // a bare .includes('hispanic') is unsafe on stored ethnicity strings.
+    const isHispanic = resolveIsHispanicLatino(profile.selfId.ethnicity, profile.selfId.race);
 
     // If options are available, find the right one by inspecting their text
     if ('options' in field && Array.isArray((field as any).options)) {

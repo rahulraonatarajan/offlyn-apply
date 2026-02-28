@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" sizes="48x48" href="../icons/icon-48.png">
   <title>Offlyn Apply - Onboarding</title>
+  <script src="../shared/theme-init.js"></script>
   <style>
     * {
       margin: 0;
@@ -806,6 +807,70 @@
       color: #666;
       text-align: center;
     }
+
+    .live-parse-feed {
+      display: none;
+      margin-top: 16px;
+      background: #0f172a;
+      border-radius: 10px;
+      padding: 14px 16px;
+      max-height: 180px;
+      overflow-y: auto;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #94a3b8;
+      scroll-behavior: smooth;
+      border: 1px solid #1e293b;
+    }
+    .live-parse-feed.visible { display: block; }
+
+    .live-parse-feed::-webkit-scrollbar { width: 5px; }
+    .live-parse-feed::-webkit-scrollbar-track { background: transparent; }
+    .live-parse-feed::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+    .feed-line {
+      white-space: pre-wrap;
+      word-break: break-word;
+      opacity: 0;
+      animation: feedLineIn 0.2s ease forwards;
+    }
+    .feed-line.stage-label {
+      color: #22c55e;
+      font-weight: 600;
+      margin-top: 6px;
+    }
+    .feed-line.text-chunk {
+      color: #64748b;
+    }
+    .feed-line.extracted {
+      color: #38bdf8;
+    }
+    .feed-line.highlight {
+      color: #fbbf24;
+    }
+    .feed-line.done-line {
+      color: #4ade80;
+      font-weight: 600;
+    }
+    @keyframes feedLineIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .feed-cursor {
+      display: inline-block;
+      width: 7px;
+      height: 14px;
+      background: #22c55e;
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: cursorBlink 0.8s step-end infinite;
+    }
+    @keyframes cursorBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
     
     .progress-stages {
       display: flex;
@@ -1602,7 +1667,68 @@
     .ts-resources a { display: block; color: #558b2f; font-size: 13px; margin-bottom: 6px; text-decoration: none; }
     .ts-resources a:hover { text-decoration: underline; }
     .ts-skip-wrap { margin-top: 20px; padding-top: 16px; border-top: 1px solid #f0f0f0; font-size: 13px; color: #6b7280; }
+
+    /* ── Dark mode toggle button ── */
+    .dark-mode-toggle {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      background: transparent;
+      border: 1px solid #e2e8f0;
+      cursor: pointer; color: #64748b;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .dark-mode-toggle:hover { background: #f1f5f9; color: #1e293b; border-color: #cbd5e1; }
+
+    /* ── Dark mode overrides ── */
+    html.dark body { background: #0f172a; color: #f1f5f9; }
+    html.dark .top-nav { background: #1e293b; border-bottom-color: #334155; }
+    html.dark .top-nav-info .top-nav-title { color: #f1f5f9; }
+    html.dark .top-nav-info .top-nav-step { color: #94a3b8; }
+    html.dark .top-nav-exit { color: #94a3b8; }
+    html.dark .top-nav-exit:hover { color: #f1f5f9; }
+    html.dark .dark-mode-toggle { border-color: #334155; color: #94a3b8; }
+    html.dark .dark-mode-toggle:hover { background: #334155; color: #f1f5f9; }
+    html.dark .container { background: transparent; }
+    html.dark .step { background: transparent; }
+    html.dark .card,
+    html.dark .section-card,
+    html.dark .upload-area,
+    html.dark .profile-section { background: #1e293b; border-color: #334155; }
+    html.dark .card h3,
+    html.dark .section-title,
+    html.dark label { color: #f1f5f9; }
+    html.dark .card p,
+    html.dark .section-subtitle,
+    html.dark .helper-text { color: #94a3b8; }
+    html.dark input[type="text"],
+    html.dark input[type="email"],
+    html.dark input[type="number"],
+    html.dark input[type="url"],
+    html.dark input[type="tel"],
+    html.dark select,
+    html.dark textarea {
+      background: #0f172a;
+      color: #f1f5f9;
+      border-color: #334155;
+    }
+    html.dark input::placeholder,
+    html.dark textarea::placeholder { color: #475569; }
+    html.dark .progress-bar-track { background: #1e293b; }
+    html.dark .step-nav { background: #1e293b; border-top-color: #334155; }
+    html.dark .btn-back { background: #263346; color: #94a3b8; border-color: #334155; }
+    html.dark .btn-back:hover { background: #334155; color: #f1f5f9; }
+    html.dark .connection-status { background: #1e293b; border-color: #334155; color: #94a3b8; }
+    html.dark .file-info { background: #0f172a; border-color: #334155; color: #94a3b8; }
+    html.dark .ts-issue { border-bottom-color: #334155; }
+    html.dark .ts-issue h4 { color: #f1f5f9; }
+    html.dark .ts-issue p,
+    html.dark .ts-issue ul { color: #94a3b8; }
+    html.dark .ts-issue code { background: #0f172a; color: #a5b4fc; }
+    html.dark .ts-skip-wrap { border-top-color: #334155; color: #94a3b8; }
   </style>
+  <script src="../pdf.worker.min.js"></script>
   <script src="pdf.min.js"></script>
 </head>
 <body>
@@ -1615,7 +1741,10 @@
         <div class="top-nav-step" id="stepIndicator">Step 1 of 8</div>
       </div>
     </div>
-    <button class="top-nav-exit" id="exitBtn" title="Close">&larr; Exit</button>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button id="dark-mode-toggle" class="dark-mode-toggle" aria-label="Toggle dark mode"></button>
+      <button class="top-nav-exit" id="exitBtn" title="Close">&larr; Exit</button>
+    </div>
   </div>
 
   <!-- Step wizard -->
@@ -1713,6 +1842,8 @@
               <div class="progress-fill" id="progressFill"></div>
             </div>
             <div class="progress-text" id="progressText">Preparing...</div>
+
+            <div class="live-parse-feed" id="liveParseFeed"></div>
             
             <div class="progress-stages">
               <div class="progress-stage" id="stage-read">
@@ -2528,5 +2659,6 @@
   </div>
 
   <script src="onboarding.js"></script>
+  <script src="../shared/dark-mode.js"></script>
 </body>
 </html>
