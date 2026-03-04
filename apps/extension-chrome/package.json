@@ -1,0 +1,39 @@
+{
+  "name": "offlyn-chrome-extension",
+  "version": "0.2.4",
+  "description": "Offline-first Chrome WebExtension for job application automation",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --watch",
+    "package": "cd dist && zip -r ../offlyn-chrome.zip .",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "chrome",
+    "webextension",
+    "job-application",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chrome": "^0.1.37",
+    "@types/node": "^20.10.0",
+    "@types/webextension-polyfill": "^0.12.5",
+    "eslint": "^9.0.0",
+    "typescript-eslint": "^8.0.0",
+    "esbuild": "^0.19.8",
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "ai": "^6.0.73",
+    "ollama-ai-provider-v2": "^2.0.0",
+    "webextension-polyfill": "^0.12.0",
+    "zod": "^4.1.8"
+  }
+}
