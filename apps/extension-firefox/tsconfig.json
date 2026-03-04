@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": ["firefox-webextension-browser", "node"]
+    "types": ["webextension-polyfill", "node"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
