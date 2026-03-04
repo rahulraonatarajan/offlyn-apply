@@ -1,0 +1,234 @@
+/**
+ * Settings page logic
+ */
+import browser from '../shared/browser-compat';
+import { getSettings, setSettings } from '../shared/storage';
+import { log, error } from '../shared/log';
+import { getOllamaConfig, saveOllamaConfig, testOllamaConnection, DEFAULT_OLLAMA_CONFIG } from '../shared/ollama-config';
+import { setHTML } from '../shared/html';
+
+async function init(): Promise<void> {
+  const settings = await getSettings();
+
+  // --- Toggles ---
+  const enabledToggle = document.getElementById('toggle-enabled');
+  const dryrunToggle = document.getElementById('toggle-dryrun');
+
+  if (enabledToggle) {
+    enabledToggle.classList.toggle('active', settings.enabled);
+    enabledToggle.setAttribute('aria-checked', String(settings.enabled));
+    enabledToggle.addEventListener('click', async () => {
+      const next = !enabledToggle.classList.contains('active');
+      enabledToggle.classList.toggle('active', next);
+      enabledToggle.setAttribute('aria-checked', String(next));
+      await setSettings({ enabled: next });
+    });
+  }
+
+  if (dryrunToggle) {
+    dryrunToggle.classList.toggle('active', settings.dryRun);
+    dryrunToggle.setAttribute('aria-checked', String(settings.dryRun));
+    dryrunToggle.addEventListener('click', async () => {
+      const next = !dryrunToggle.classList.contains('active');
+      dryrunToggle.classList.toggle('active', next);
+      dryrunToggle.setAttribute('aria-checked', String(next));
+      await setSettings({ dryRun: next });
+    });
+  }
+
+  // --- WhatsApp number ---
+  const whatsappInput = document.getElementById('input-whatsapp') as HTMLInputElement | null;
+  if (whatsappInput) {
+    whatsappInput.value = settings.whatsappTarget || '';
+    let debounce: ReturnType<typeof setTimeout>;
+    whatsappInput.addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(async () => {
+        const val = whatsappInput.value.trim();
+        await setSettings({ whatsappTarget: val || undefined });
+      }, 600);
+    });
+  }
+
+  // --- Export Profile ---
+  document.getElementById('btn-export-profile')?.addEventListener('click', async () => {
+    try {
+      const result = await browser.storage.local.get('userProfile');
+      const profile = result.userProfile;
+      if (!profile) { alert('No profile found. Set up your profile first.'); return; }
+      await navigator.clipboard.writeText(JSON.stringify(profile, null, 2));
+      showFeedback('feedback-export');
+    } catch (err) { error('Export failed:', err); }
+  });
+
+  // --- View Learned Values ---
+  document.getElementById('btn-view-learned')?.addEventListener('click', async () => {
+    await browser.storage.local.set({ showLearnedValues: true });
+    browser.tabs.create({ url: browser.runtime.getURL('onboarding/onboarding.html') });
+  });
+
+  // --- Reset Self-ID ---
+  document.getElementById('btn-clean-selfid')?.addEventListener('click', async () => {
+    if (!confirm('Reset Self-ID data (Gender, Race, Disability, Veteran Status) to defaults?\n\nYour personal info and work history will not be affected.')) return;
+    try {
+      const result = await browser.storage.local.get('userProfile');
+      const profile = result.userProfile;
+      if (!profile) { alert('No profile found.'); return; }
+      profile.selfId = {
+        gender: [], race: [], orientation: [],
+        veteran: 'Decline to self-identify',
+        transgender: 'Decline to self-identify',
+        disability: 'Decline to self-identify',
+      };
+      profile.lastUpdated = Date.now();
+      await browser.storage.local.set({ userProfile: profile });
+      showFeedback('feedback-selfid');
+    } catch (err) { error('Self-ID reset failed:', err); }
+  });
+
+  // --- Clear All Applications ---
+  document.getElementById('btn-clear-apps')?.addEventListener('click', async () => {
+    if (!confirm('Delete ALL tracked job applications?\n\nThis cannot be undone.')) return;
+    try {
+      const allKeys = await browser.storage.local.get(null);
+      const summaryKeys = Object.keys(allKeys).filter(k => k.startsWith('dailySummary_'));
+      if (summaryKeys.length > 0) {
+        await browser.storage.local.remove(summaryKeys);
+      }
+      showFeedback('feedback-clear');
+    } catch (err) { error('Clear apps failed:', err); }
+  });
+
+  // --- Storage usage ---
+  try {
+    const allData = await browser.storage.local.get(null);
+    const bytes = new Blob([JSON.stringify(allData)]).size;
+    const kb = (bytes / 1024).toFixed(1);
+    const mb = (bytes / (1024 * 1024)).toFixed(2);
+    const pct = Math.min(100, (bytes / (10 * 1024 * 1024)) * 100);
+    const fill = document.getElementById('storage-fill');
+    const text = document.getElementById('storage-text');
+    if (fill) fill.style.width = `${pct}%`;
+    if (text) text.textContent = bytes > 1024 * 1024 ? `${mb} MB used` : `${kb} KB used`;
+  } catch { /* ignore */ }
+
+  // --- Ollama Configuration section ---
+  await initOllamaSettings();
+
+  // --- Version ---
+  try {
+    const manifest = browser.runtime.getManifest();
+    const v = manifest.version || '0.1.0';
+    const versionText = document.getElementById('version-text');
+    const footerVersion = document.getElementById('footer-version');
+    if (versionText) versionText.textContent = v;
+    if (footerVersion) footerVersion.textContent = `v${v}`;
+  } catch { /* ignore */ }
+
+  log('Settings page initialized');
+}
+
+function showFeedback(id: string): void {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('visible');
+  setTimeout(() => el.classList.remove('visible'), 2000);
+}
+
+async function initOllamaSettings(): Promise<void> {
+  const badge = document.getElementById('ollama-badge') as HTMLElement | null;
+  const hint = document.getElementById('ollama-status') as HTMLElement | null;
+  const epInput = document.getElementById('settings-ollama-endpoint') as HTMLInputElement | null;
+  const chatInput = document.getElementById('settings-ollama-chat-model') as HTMLInputElement | null;
+  const embInput = document.getElementById('settings-ollama-embed-model') as HTMLInputElement | null;
+  const testResultEl = document.getElementById('settings-ollama-test-result') as HTMLElement | null;
+
+  // Load current config into inputs
+  try {
+    const config = await getOllamaConfig();
+    if (epInput) epInput.value = config.endpoint;
+    if (chatInput) chatInput.value = config.chatModel;
+    if (embInput) embInput.value = config.embeddingModel;
+
+    // Show connection status badge
+    const result = await testOllamaConnection(config.endpoint);
+    applyOllamaBadge(badge, hint, result, config.endpoint, config.enabled);
+  } catch (err) {
+    error('Failed to load Ollama config:', err);
+  }
+
+  // Test connection button
+  document.getElementById('btn-test-ollama')?.addEventListener('click', async () => {
+    const endpoint = epInput?.value.trim() || DEFAULT_OLLAMA_CONFIG.endpoint;
+    if (testResultEl) {
+      testResultEl.textContent = 'Testing...';
+      testResultEl.className = 'ollama-test-result visible';
+    }
+    const result = await testOllamaConnection(endpoint);
+    if (testResultEl) {
+      if (!result.success) {
+        testResultEl.textContent = `Cannot reach Ollama: ${result.error}`;
+        testResultEl.className = 'ollama-test-result visible fail';
+      } else if (result.corsBlocked) {
+        setHTML(testResultEl,
+          `<strong>CORS Blocked</strong> — Ollama v${result.version} is running but blocking this extension.<br><br>` +
+          `<strong>Fix:</strong> Stop Ollama, then run this as ONE command in a new terminal:<br>` +
+          `<code style="background:#1e2a3a;color:#fbbf24;padding:4px 8px;border-radius:4px;display:inline-block;margin-top:6px;font-size:12px;word-break:break-all;">` +
+          `OLLAMA_ORIGINS='chrome-extension://*' ollama serve</code><br>` +
+          `<span style="font-size:11px;color:#6b7280;margin-top:4px;display:inline-block;">Keep that terminal open, then click Test Connection again.</span>`);
+        testResultEl.className = 'ollama-test-result visible fail';
+      } else {
+        testResultEl.textContent = `Connected! Ollama v${result.version} — AI features fully working`;
+        testResultEl.className = 'ollama-test-result visible ok';
+      }
+    }
+    applyOllamaBadge(badge, hint, result, endpoint, true);
+  });
+
+  // Save config button
+  document.getElementById('btn-save-ollama')?.addEventListener('click', async () => {
+    try {
+      const endpoint = epInput?.value.trim() || DEFAULT_OLLAMA_CONFIG.endpoint;
+      const chatModel = chatInput?.value.trim() || DEFAULT_OLLAMA_CONFIG.chatModel;
+      const embeddingModel = embInput?.value.trim() || DEFAULT_OLLAMA_CONFIG.embeddingModel;
+
+      const cfg = await getOllamaConfig();
+      cfg.endpoint = endpoint;
+      cfg.chatModel = chatModel;
+      cfg.embeddingModel = embeddingModel;
+
+      // Test before enabling — only enable if both reachable AND CORS is not blocked
+      const result = await testOllamaConnection(endpoint);
+      cfg.enabled = result.success && !result.corsBlocked;
+      cfg.lastChecked = Date.now();
+      await saveOllamaConfig(cfg);
+
+      applyOllamaBadge(badge, hint, result, endpoint, cfg.enabled);
+      showFeedback('feedback-ollama');
+    } catch (err) {
+      error('Failed to save Ollama config:', err);
+    }
+  });
+}
+
+/** Apply badge + hint text based on connection test result */
+function applyOllamaBadge(
+  badge: HTMLElement | null,
+  hint: HTMLElement | null,
+  result: Awaited<ReturnType<typeof testOllamaConnection>>,
+  endpoint: string,
+  enabled: boolean,
+): void {
+  if (!result.success) {
+    if (badge) { badge.textContent = 'Offline'; badge.style.background = '#ffebee'; badge.style.color = '#c62828'; }
+    if (hint) hint.textContent = enabled ? 'Cannot reach Ollama — check that it is running' : 'AI features disabled — configure below to enable';
+  } else if (result.corsBlocked) {
+    if (badge) { badge.textContent = 'CORS Blocked'; badge.style.background = '#fffbeb'; badge.style.color = '#d97706'; }
+    if (hint) hint.textContent = `Ollama v${result.version} reachable but blocking extension. Stop Ollama, then run as one command: OLLAMA_ORIGINS='chrome-extension://*' ollama serve`;
+  } else {
+    if (badge) { badge.textContent = 'Connected'; badge.style.background = '#e8f5e9'; badge.style.color = '#2e7d32'; }
+    if (hint) hint.textContent = `Ollama v${result.version} at ${endpoint} — AI features ready`;
+  }
+}
+
+init();
