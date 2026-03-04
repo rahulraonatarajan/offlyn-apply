@@ -51,7 +51,7 @@ jobs:
           cache-dependency-path: apps/extension-firefox/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       # ── Must-pass checks ───────────────────────────────────────────────────
       - name: Build
@@ -141,7 +141,7 @@ jobs:
           cache-dependency-path: apps/extension-chrome/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build
         run: npm run build
