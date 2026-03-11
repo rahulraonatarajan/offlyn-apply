@@ -15,9 +15,9 @@
   </p>
 
   <p>
-    <a href="https://chromewebstore.google.com/detail/offlyn-apply-job-applicat/bjllpojjllhfghiemokcoknfmhpmfbph"><strong>🌐 Get for Chrome</strong></a> ·
-    <a href="https://addons.mozilla.org/en-US/firefox/addon/offlyn-apply/"><strong>🦊 Get for Firefox</strong></a> ·
-    <a href="https://joelnishanth.github.io/offlyn-apply"><strong>🌐 Website</strong></a> ·
+    <a href="https://chromewebstore.google.com/detail/offlyn-apply-job-applicat/bjllpojjllhfghiemokcoknfmhpmfbph"><strong>Get for Chrome</strong></a> ·
+    <a href="https://addons.mozilla.org/en-US/firefox/addon/offlyn-apply/"><strong>Get for Firefox</strong></a> ·
+    <a href="https://joelnishanth.github.io/offlyn-apply"><strong>Website</strong></a> ·
     <a href="#getting-started"><strong>Quick Start</strong></a> ·
     <a href="CONTRIBUTING.md"><strong>Contributing</strong></a> ·
     <a href="https://github.com/joelnishanth/offlyn-apply/issues/new/choose"><strong>Report a Bug</strong></a>
@@ -37,12 +37,12 @@ Offlyn Apply detects job application forms on sites like Workday, Greenhouse, Le
 
 | Feature | Description |
 |---|---|
-| ⚡ **Smart Auto-Fill** | Detects all form fields and fills them from your profile in seconds |
-| 🧠 **AI Cover Letters** | Generates tailored cover letters using a local Ollama model |
-| 📊 **Application Tracker** | Kanban dashboard to track every application from submitted to offer |
-| 🔒 **100% Private** | All data in `browser.storage.local` — no backend, no sync, no cloud |
-| 🎯 **ATS Detection** | Identifies Workday, Greenhouse, Lever, and 50+ other ATS systems |
-| 🔁 **Learns From You** | Reinforcement learning improves autofill accuracy from your corrections |
+| **Smart Auto-Fill** | Detects all form fields and fills them from your profile in seconds |
+| **AI Cover Letters** | Generates tailored cover letters using a local Ollama model |
+| **Application Tracker** | Kanban dashboard to track every application from submitted to offer |
+| **100% Private** | All data in `browser.storage.local` — no backend, no sync, no cloud |
+| **ATS Detection** | Identifies Workday, Greenhouse, Lever, and 50+ other ATS systems |
+| **Learns From You** | Reinforcement learning improves autofill accuracy from your corrections |
 
 ---
 
