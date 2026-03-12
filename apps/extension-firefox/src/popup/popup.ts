@@ -168,6 +168,11 @@ async function init(): Promise<void> {
     window.close();
   });
 
+  document.getElementById('data-explorer-btn')?.addEventListener('click', () => {
+    browser.tabs.create({ url: browser.runtime.getURL('data/data.html') });
+    window.close();
+  });
+
   // ── Footer links ──
   document.getElementById('home-btn')?.addEventListener('click', () => {
     browser.tabs.create({ url: browser.runtime.getURL('home/home.html') });

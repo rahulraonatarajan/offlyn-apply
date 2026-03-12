@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Explorer — Offlyn Apply</title>
+  <script src="../shared/theme-init.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #f8fafc;
+      --surface: #fff;
+      --surface2: #f1f5f9;
+      --border: #e2e8f0;
+      --text: #1a1a1a;
+      --text-muted: #64748b;
+      --text-faint: #94a3b8;
+      --accent: #1e293b;
+      --green: #16a34a;
+      --green-bg: #f0fdf4;
+      --green-border: #bbf7d0;
+      --blue: #1d4ed8;
+      --blue-bg: #eff6ff;
+      --blue-border: #bfdbfe;
+      --purple: #7c3aed;
+      --purple-bg: #faf5ff;
+      --purple-border: #ddd6fe;
+      --orange: #c2410c;
+      --orange-bg: #fff7ed;
+      --orange-border: #fed7aa;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.07);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.09);
+    }
+
+    html.dark {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #263448;
+      --border: #334155;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-faint: #475569;
+      --accent: #e2e8f0;
+      --green-bg: rgba(22,163,74,.1);
+      --green-border: rgba(74,222,128,.2);
+      --blue-bg: rgba(59,130,246,.1);
+      --blue-border: rgba(96,165,250,.2);
+      --purple-bg: rgba(124,58,237,.1);
+      --purple-border: rgba(167,139,250,.2);
+      --orange-bg: rgba(249,115,22,.08);
+      --orange-border: rgba(249,115,22,.25);
+    }
+
+    html, body {
+      min-height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    /* ── Layout ─────────────────────────────────────────────── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      max-width: 820px;
+      margin: 0 auto;
+      background: var(--surface);
+      box-shadow: 0 0 0 1px var(--border);
+    }
+
+    /* ── Header ──────────────────────────────────────────────── */
+    .header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      background: linear-gradient(90deg, #1e293b 0%, #334155 100%);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-back {
+      background: rgba(255,255,255,.1);
+      border: none;
+      border-radius: 8px;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      color: rgba(255,255,255,.8);
+      transition: background .15s;
+      flex-shrink: 0;
+    }
+    .header-back:hover { background: rgba(255,255,255,.2); color: #fff; }
+    .header-icon {
+      width: 34px; height: 34px;
+      background: rgba(255,255,255,.12);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .header-text { flex: 1; }
+    .header-title { font-size: 15px; font-weight: 700; color: #fff; line-height: 1.2; }
+    .header-sub { font-size: 11px; color: rgba(255,255,255,.55); margin-top: 1px; }
+
+    .header-refresh {
+      background: rgba(255,255,255,.1);
+      border: none;
+      border-radius: 8px;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      color: rgba(255,255,255,.8);
+      transition: background .15s, transform .3s;
+      flex-shrink: 0;
+    }
+    .header-refresh:hover { background: rgba(255,255,255,.2); color: #fff; }
+    .header-refresh.spinning { animation: spin .6s linear; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Tabs ────────────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      padding: 12px 20px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 62px;
+      z-index: 90;
+    }
+    .tab {
+      padding: 8px 16px;
+      border: none;
+      background: none;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      border-radius: 6px 6px 0 0;
+      transition: color .15s, border-color .15s, background .15s;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); background: var(--surface2); }
+    .tab.active { color: #1e293b; border-color: #1e293b; font-weight: 700; }
+    html.dark .tab.active { color: #e2e8f0; border-color: #e2e8f0; }
+    .tab-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-faint);
+    }
+    .tab.active .tab-badge { background: #1e293b; color: #fff; border-color: #1e293b; }
+    html.dark .tab.active .tab-badge { background: #334155; }
+
+    /* ── Content ─────────────────────────────────────────────── */
+    .content {
+      flex: 1;
+      padding: 24px 20px;
+      display: none;
+    }
+    .content.active { display: block; }
+
+    /* ── Loading / empty states ─────────────────────────────── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 24px;
+      text-align: center;
+      gap: 12px;
+      color: var(--text-muted);
+    }
+    .empty-icon {
+      font-size: 40px;
+      margin-bottom: 4px;
+      line-height: 1;
+    }
+    .empty-state h3 { font-size: 16px; font-weight: 700; color: var(--text); }
+    .empty-state p { font-size: 13px; line-height: 1.6; max-width: 320px; }
+    .empty-state a { color: var(--blue); text-decoration: none; font-weight: 600; }
+
+    /* ── Section headers ─────────────────────────────────────── */
+    .section { margin-bottom: 28px; }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--text-faint);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Cards ───────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    html.dark .card { background: var(--surface2); }
+
+    /* ── Info grid ───────────────────────────────────────────── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+    }
+    .info-item { display: flex; flex-direction: column; gap: 2px; }
+    .info-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-faint);
+    }
+    .info-value {
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .info-value a { color: var(--blue); text-decoration: none; }
+    .info-value a:hover { text-decoration: underline; }
+
+    /* ── Stat row ────────────────────────────────────────────── */
+    .stat-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .stat-pill {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 10px 18px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      min-width: 80px;
+    }
+    .stat-num {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1;
+    }
+    .stat-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-faint);
+    }
+
+    /* ── Timeline (work history) ─────────────────────────────── */
+    .timeline { display: flex; flex-direction: column; gap: 16px; }
+    .timeline-item {
+      display: flex;
+      gap: 14px;
+    }
+    .timeline-dot-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 20px;
+      flex-shrink: 0;
+    }
+    .timeline-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #1e293b;
+      border: 2px solid var(--border);
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .timeline-line {
+      flex: 1;
+      width: 1px;
+      background: var(--border);
+      margin-top: 6px;
+    }
+    .timeline-body { flex: 1; padding-bottom: 4px; }
+    .timeline-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+    .timeline-title { font-size: 14px; font-weight: 700; color: var(--text); }
+    .timeline-company { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+    .timeline-date {
+      font-size: 11px;
+      color: var(--text-faint);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .timeline-desc {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin-top: 6px;
+    }
+    .badge-current {
+      display: inline-block;
+      padding: 1px 8px;
+      background: var(--green-bg);
+      border: 1px solid var(--green-border);
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--green);
+      margin-left: 8px;
+    }
+
+    /* ── Skills ──────────────────────────────────────────────── */
+    .skills-list { display: flex; flex-wrap: wrap; gap: 7px; }
+    .skill-tag {
+      padding: 4px 11px;
+      background: var(--blue-bg);
+      border: 1px solid var(--blue-border);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--blue);
+    }
+    html.dark .skill-tag { color: #60a5fa; }
+
+    /* ── Education ───────────────────────────────────────────── */
+    .edu-grid { display: flex; flex-direction: column; gap: 10px; }
+    .edu-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .edu-icon {
+      width: 36px; height: 36px;
+      background: var(--purple-bg);
+      border: 1px solid var(--purple-border);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .edu-body { flex: 1; }
+    .edu-school { font-size: 14px; font-weight: 700; color: var(--text); }
+    .edu-degree { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+    .edu-year { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+
+    /* ── Work auth badge ─────────────────────────────────────── */
+    .auth-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+    .auth-badge.authorized {
+      background: var(--green-bg);
+      border: 1px solid var(--green-border);
+      color: var(--green);
+    }
+    .auth-badge.sponsorship {
+      background: var(--orange-bg);
+      border: 1px solid var(--orange-border);
+      color: var(--orange);
+    }
+    html.dark .auth-badge.authorized { color: #4ade80; }
+    html.dark .auth-badge.sponsorship { color: #fb923c; }
+
+    /* ── Summary block ───────────────────────────────────────── */
+    .summary-text {
+      font-size: 13.5px;
+      line-height: 1.65;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+    }
+
+    /* ── Graph answer rows ───────────────────────────────────── */
+    .answer-list { display: flex; flex-direction: column; gap: 8px; }
+    .answer-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .answer-meta { flex: 1; min-width: 0; }
+    .answer-question {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-faint);
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .answer-value {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .answer-source-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 9px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .badge-profile { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); }
+    .badge-llm     { background: var(--purple-bg); border: 1px solid var(--purple-border); color: var(--purple); }
+    .badge-user    { background: var(--blue-bg); border: 1px solid var(--blue-border); color: var(--blue); }
+    .badge-learned { background: var(--orange-bg); border: 1px solid var(--orange-border); color: var(--orange); }
+    html.dark .badge-profile { color: #4ade80; }
+    html.dark .badge-llm     { color: #a78bfa; }
+    html.dark .badge-user    { color: #60a5fa; }
+    html.dark .badge-learned { color: #fb923c; }
+
+    .answer-usage {
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-left: auto;
+      flex-shrink: 0;
+      align-self: flex-start;
+    }
+
+    /* ── Confidence bar (RL) ─────────────────────────────────── */
+    .conf-bar-wrap {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .conf-bar {
+      height: 100%;
+      border-radius: 2px;
+      transition: width .4s ease;
+    }
+    .conf-high { background: #16a34a; }
+    .conf-mid  { background: #f59e0b; }
+    .conf-low  { background: #ef4444; }
+
+    .rl-row {
+      padding: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .rl-row-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .rl-field {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .rl-conf {
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .rl-value {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .rl-meta {
+      font-size: 10.5px;
+      color: var(--text-faint);
+      margin-top: 4px;
+    }
+
+    /* ── Correction rows ─────────────────────────────────────── */
+    .correction-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .correction-arrow {
+      font-size: 14px;
+      color: var(--text-faint);
+      padding-top: 2px;
+      flex-shrink: 0;
+    }
+    .correction-body { flex: 1; min-width: 0; }
+    .correction-old {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-decoration: line-through;
+      margin-bottom: 2px;
+    }
+    .correction-new {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--green);
+    }
+    html.dark .correction-new { color: #4ade80; }
+    .correction-field {
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-top: 4px;
+    }
+
+    /* ── Graph node type chips ───────────────────────────────── */
+    .node-type-chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .nt-question { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+    .nt-answer   { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+    .nt-field    { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
+    .nt-correction { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-border); }
+    .nt-application { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+    html.dark .nt-question { color: #60a5fa; }
+    html.dark .nt-answer   { color: #4ade80; }
+    html.dark .nt-field    { color: #a78bfa; }
+    html.dark .nt-correction { color: #fb923c; }
+
+    /* ── No-profile note ─────────────────────────────────────── */
+    .no-profile-note {
+      padding: 12px 16px;
+      background: var(--orange-bg);
+      border: 1px solid var(--orange-border);
+      border-radius: 10px;
+      font-size: 12.5px;
+      color: var(--orange);
+      margin-bottom: 20px;
+    }
+    .no-profile-note a { color: inherit; font-weight: 700; }
+    html.dark .no-profile-note { color: #fb923c; }
+
+    /* ── Scrollbar ───────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <button class="header-back" id="back-btn" title="Back to popup">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="header-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
+    <div class="header-text">
+      <div class="header-title">Data Explorer</div>
+      <div class="header-sub">Profile · Graph Memory · Learned Patterns</div>
+    </div>
+    <button class="header-refresh" id="refresh-btn" title="Refresh data">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="tabs">
+    <button class="tab active" data-tab="profile">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Profile
+    </button>
+    <button class="tab" data-tab="graph">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      Graph Memory
+      <span class="tab-badge" id="tab-badge-graph">0</span>
+    </button>
+    <button class="tab" data-tab="rl">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      RL Patterns
+      <span class="tab-badge" id="tab-badge-rl">0</span>
+    </button>
+  </div>
+
+  <!-- ── PROFILE TAB ─────────────────────────────────────────── -->
+  <div class="content active" id="tab-profile">
+    <div id="profile-loading" class="empty-state">
+      <div class="empty-icon">⏳</div>
+      <h3>Loading…</h3>
+    </div>
+    <div id="profile-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">👤</div>
+      <h3>No profile yet</h3>
+      <p>Upload your resume on the <a href="../onboarding/onboarding.html">onboarding page</a> to populate your profile data.</p>
+    </div>
+    <div id="profile-content" style="display:none;">
+      <!-- Personal -->
+      <div class="section">
+        <div class="section-title">Personal</div>
+        <div class="card">
+          <div class="info-grid" id="personal-grid"></div>
+        </div>
+      </div>
+      <!-- Summary -->
+      <div class="section" id="summary-section" style="display:none;">
+        <div class="section-title">Summary</div>
+        <div class="card">
+          <div class="summary-text" id="summary-text"></div>
+        </div>
+      </div>
+      <!-- Work Auth -->
+      <div class="section" id="workauth-section" style="display:none;">
+        <div class="section-title">Work Authorization</div>
+        <div class="card">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;" id="workauth-badges"></div>
+        </div>
+      </div>
+      <!-- Work History -->
+      <div class="section" id="work-section" style="display:none;">
+        <div class="section-title">Work History</div>
+        <div class="timeline" id="work-timeline"></div>
+      </div>
+      <!-- Education -->
+      <div class="section" id="edu-section" style="display:none;">
+        <div class="section-title">Education</div>
+        <div class="edu-grid" id="edu-grid"></div>
+      </div>
+      <!-- Skills -->
+      <div class="section" id="skills-section" style="display:none;">
+        <div class="section-title">Skills</div>
+        <div class="skills-list" id="skills-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── GRAPH MEMORY TAB ───────────────────────────────────── -->
+  <div class="content" id="tab-graph">
+    <div id="graph-loading" class="empty-state">
+      <div class="empty-icon">⏳</div>
+      <h3>Loading…</h3>
+    </div>
+    <div id="graph-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">🕸️</div>
+      <h3>Graph is empty</h3>
+      <p>The graph learns as you autofill forms. Use Offlyn Apply on job applications to start building your memory graph.</p>
+    </div>
+    <div id="graph-content" style="display:none;">
+      <!-- Stats -->
+      <div class="section">
+        <div class="section-title">Overview</div>
+        <div class="stat-row" id="graph-stats-row"></div>
+      </div>
+      <!-- Top Answers -->
+      <div class="section" id="graph-answers-section" style="display:none;">
+        <div class="section-title">Top Answers by Usage</div>
+        <div class="answer-list" id="graph-answers-list"></div>
+      </div>
+      <!-- Corrections -->
+      <div class="section" id="graph-corrections-section" style="display:none;">
+        <div class="section-title">Corrections Learned</div>
+        <div style="display:flex;flex-direction:column;gap:8px;" id="graph-corrections-list"></div>
+      </div>
+      <!-- Applications -->
+      <div class="section" id="graph-apps-section" style="display:none;">
+        <div class="section-title">Applications Tracked</div>
+        <div style="display:flex;flex-direction:column;gap:8px;" id="graph-apps-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RL PATTERNS TAB ────────────────────────────────────── -->
+  <div class="content" id="tab-rl">
+    <div id="rl-loading" class="empty-state">
+      <div class="empty-icon">⏳</div>
+      <h3>Loading…</h3>
+    </div>
+    <div id="rl-empty" class="empty-state" style="display:none;">
+      <div class="empty-icon">📖</div>
+      <h3>Nothing learned yet</h3>
+      <p>The RL system learns from your corrections. Autofill a form, adjust values, then submit to start building patterns.</p>
+    </div>
+    <div id="rl-content" style="display:none;">
+      <!-- Stats -->
+      <div class="section">
+        <div class="section-title">Overview</div>
+        <div class="stat-row" id="rl-stats-row"></div>
+      </div>
+      <!-- Patterns -->
+      <div class="section" id="rl-patterns-section" style="display:none;">
+        <div class="section-title">Learned Patterns</div>
+        <div style="display:flex;flex-direction:column;gap:8px;" id="rl-patterns-list"></div>
+      </div>
+      <!-- Corrections -->
+      <div class="section" id="rl-corr-section" style="display:none;">
+        <div class="section-title">Correction Events</div>
+        <div style="display:flex;flex-direction:column;gap:8px;" id="rl-corr-list"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="data.js"></script>
+<script src="../shared/dark-mode.js"></script>
+</body>
+</html>

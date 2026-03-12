@@ -57,6 +57,7 @@ const pathMap = {
   'src/dashboard/dashboard.ts': 'dist/dashboard/dashboard.js',
   'src/settings/settings.ts': 'dist/settings/settings.js',
   'src/chat/chat.ts': 'dist/chat/chat.js',
+  'src/data/data.ts': 'dist/data/data.js',
 };
 
 async function build() {
