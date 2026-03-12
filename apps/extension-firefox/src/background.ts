@@ -474,6 +474,45 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
       return;
     }
 
+    // ── Graph: look up best answer for a field (called from content script) ──────
+    if (message.kind === 'GRAPH_GET_BEST_ANSWER') {
+      const msg = message as any;
+      const result = await graphMemory.getBestAnswerForField({
+        questionText: msg.questionText ?? '',
+        canonicalField: msg.canonicalField,
+        platform: msg.platform,
+        company: msg.company,
+        jobTitle: msg.jobTitle,
+        url: msg.url,
+      });
+      return result;
+    }
+
+    // ── Graph: record a successfully used answer ──────────────────────────────
+    if (message.kind === 'GRAPH_RECORD_ANSWER') {
+      const msg = message as any;
+      graphMemory.recordAnswer(
+        msg.questionText ?? '',
+        msg.value ?? '',
+        msg.source ?? 'profile',
+        msg.canonicalField ?? 'unknown',
+        {
+          company: msg.context?.company,
+          jobTitle: msg.context?.jobTitle,
+          url: msg.context?.url,
+          platform: msg.context?.platform,
+        }
+      );
+      return;
+    }
+
+    // ── Graph: record fill provenance (for debug panel) ───────────────────────
+    if (message.kind === 'GRAPH_RECORD_PROVENANCE') {
+      const msg = message as any;
+      graphMemory.recordFillProvenance(msg.label ?? '', msg.record);
+      return;
+    }
+
     // ── Graph debug: "Why was this filled?" ───────────────────────────────────
     if (message.kind === 'GRAPH_DEBUG_REQUEST') {
       const msg = message as any;

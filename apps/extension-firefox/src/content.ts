@@ -2996,6 +2996,25 @@ async function executeFillPlan(plan: FillPlan): Promise<void> {
   
   // Show completion message
   info(`✅ Autofill complete! Filled ${result.filledCount} fields, ${result.failedSelectors.length} failed.`);
+
+  // Teach the graph — record every successfully filled answer into background's graphMemory
+  for (const [selector, { field, value }] of autoFilledValues) {
+    const fieldLabel = field.label ?? field.name ?? '';
+    if (!fieldLabel || !value || typeof value === 'boolean') continue;
+    browser.runtime.sendMessage({
+      kind: 'GRAPH_RECORD_ANSWER',
+      questionText: fieldLabel,
+      value: String(value),
+      source: 'profile',
+      canonicalField: detectFieldType(fieldLabel, field.type ?? '', field.name ?? '') || 'unknown',
+      context: {
+        company: lastJobMeta?.company ?? undefined,
+        jobTitle: lastJobMeta?.jobTitle ?? undefined,
+        url: window.location.href,
+        platform: lastJobMeta?.atsHint ?? undefined,
+      },
+    }).catch(() => {});
+  }
   
   // Show progress completion
   const allSuccess = result.failedSelectors.length === 0 && result.filledCount > 0;
