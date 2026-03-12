@@ -173,6 +173,7 @@
       display: none;
     }
     .content.active { display: block; }
+    #tab-flowchart.active { display: flex; }
 
     /* ── Loading / empty states ─────────────────────────────── */
     .empty-state {
@@ -588,6 +589,117 @@
     .no-profile-note a { color: inherit; font-weight: 700; }
     html.dark .no-profile-note { color: #fb923c; }
 
+    /* ── Flowchart canvas ────────────────────────────────────── */
+    #tab-flowchart {
+      padding: 0;
+      overflow: hidden;
+      height: calc(100vh - 115px); /* fill remaining viewport below header+tabs */
+    }
+    .flowchart-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: relative;
+      z-index: 2;
+      flex-shrink: 0;
+    }
+    .flowchart-wrap {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      cursor: grab;
+      user-select: none;
+    }
+    .flowchart-wrap:active { cursor: grabbing; }
+    #flowchart-svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .fc-btn {
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface2);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .fc-btn:hover { background: var(--border); color: var(--text); }
+    .fc-filter {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 4px 9px;
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      color: var(--text-muted);
+      transition: all .15s;
+    }
+    .fc-filter input { display: none; }
+    .fc-filter:has(input:checked) { border-color: currentColor; }
+    .fc-filter.nt-q  { color: #1d4ed8; }
+    .fc-filter.nt-a  { color: #16a34a; }
+    .fc-filter.nt-f  { color: #7c3aed; }
+    .fc-filter.nt-c  { color: #c2410c; }
+    .fc-filter.nt-ap { color: #64748b; }
+    html.dark .fc-filter.nt-q  { color: #60a5fa; }
+    html.dark .fc-filter.nt-a  { color: #4ade80; }
+    html.dark .fc-filter.nt-f  { color: #a78bfa; }
+    html.dark .fc-filter.nt-c  { color: #fb923c; }
+    .fc-sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+    .fc-node-tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text);
+      box-shadow: var(--shadow-md);
+      max-width: 280px;
+      word-break: break-word;
+      line-height: 1.5;
+      z-index: 999;
+      display: none;
+    }
+    .fc-node-tooltip strong { display: block; font-size: 13px; margin-bottom: 2px; }
+    .fc-node-tooltip .fc-tt-meta { color: var(--text-faint); font-size: 10.5px; margin-top: 4px; }
+    .fc-hint {
+      position: absolute;
+      bottom: 12px;
+      right: 16px;
+      font-size: 10.5px;
+      color: var(--text-faint);
+      pointer-events: none;
+    }
+    .flowchart-empty {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 40px;
+    }
+    .flowchart-empty.show { display: flex; }
+    .flowchart-empty .empty-icon { font-size: 40px; }
+    .flowchart-empty h3 { font-size: 16px; font-weight: 700; color: var(--text); }
+    .flowchart-empty p  { font-size: 13px; line-height: 1.6; max-width: 300px; }
+
     /* ── Scrollbar ───────────────────────────────────────────── */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -630,6 +742,10 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
       RL Patterns
       <span class="tab-badge" id="tab-badge-rl">0</span>
+    </button>
+    <button class="tab" data-tab="flowchart">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 12h10M17 7l-8 4M17 17l-8-4"/></svg>
+      Relationships
     </button>
   </div>
 
@@ -748,6 +864,66 @@
       </div>
     </div>
   </div>
+
+</div>
+
+  <!-- ── RELATIONSHIPS TAB ─────────────────────────────────── -->
+  <div class="content" id="tab-flowchart" style="flex-direction:column;">
+
+    <!-- Toolbar -->
+    <div class="flowchart-toolbar">
+      <!-- Node-type filter chips -->
+      <label class="fc-filter nt-q">
+        <input type="checkbox" id="fc-show-question" checked> Questions
+      </label>
+      <label class="fc-filter nt-a">
+        <input type="checkbox" id="fc-show-answer" checked> Answers
+      </label>
+      <label class="fc-filter nt-f">
+        <input type="checkbox" id="fc-show-field" checked> Fields
+      </label>
+      <label class="fc-filter nt-c">
+        <input type="checkbox" id="fc-show-correction"> Corrections
+      </label>
+      <label class="fc-filter nt-ap">
+        <input type="checkbox" id="fc-show-application"> Applications
+      </label>
+      <div class="fc-sep"></div>
+      <button class="fc-btn" id="fc-reset">⟳ Reset Layout</button>
+      <button class="fc-btn" id="fc-zoom-in">＋</button>
+      <button class="fc-btn" id="fc-zoom-out">−</button>
+      <button class="fc-btn" id="fc-fit">Fit</button>
+    </div>
+
+    <!-- Canvas area -->
+    <div class="flowchart-wrap" id="flowchart-wrap">
+      <svg id="flowchart-svg" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#94a3b8"/>
+          </marker>
+          <marker id="arrow-hi" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#f59e0b"/>
+          </marker>
+        </defs>
+        <g id="fc-viewport">
+          <g id="fc-edges"></g>
+          <g id="fc-nodes"></g>
+        </g>
+      </svg>
+      <!-- Empty state shown when no graph data -->
+      <div class="flowchart-empty" id="flowchart-empty">
+        <div class="empty-icon">🕸️</div>
+        <h3>Nothing to visualize yet</h3>
+        <p>The graph builds as you autofill job applications. Come back after a few fills.</p>
+      </div>
+      <div class="fc-hint" id="fc-hint">Scroll to zoom · Drag canvas to pan · Click node for details</div>
+    </div>
+
+  </div>
+
+  <!-- Node tooltip -->
+  <div class="fc-node-tooltip" id="fc-tooltip"></div>
 
 </div>
 
