@@ -187,9 +187,44 @@ export async function applyGraphEnhancement(
 ): Promise<FillMapping[]> {
   const filledSelectors = new Set(existingMappings.map(m => m.selector));
   const enhanced = [...existingMappings];
+  const unfilledCount = schema.filter(f => !filledSelectors.has(f.selector)).length;
+  console.log(`[Autofill/Graph] Running — ${filledSelectors.size} already filled, checking ${unfilledCount} unfilled fields`);
+
+  // Labels that are generic UI placeholders — never meaningful to look up in the graph
+  const PLACEHOLDER_LABELS = /^(select\.{0,3}|search|attach|upload|choose\.{0,3}|file|browse|open|add|upload file|attach file)$/i;
+
+  // Field types that cannot be programmatically filled (security restriction) or have no text to match
+  const UNFILLABLE_TYPES = new Set(['file', 'image', 'submit', 'button', 'reset', 'hidden']);
+
+  // Question patterns that need human judgment / contextual answers — graph "No" from a
+  // previous sponsorship question must not bleed into timeline or address fields
+  const CONTEXTUAL_QUESTION_PATTERNS = [
+    /earliest.*start/i,
+    /when.*start/i,
+    /start.*date/i,
+    /available.*start/i,
+    /\baddress\b/i,
+    /\bstreet\b/i,
+    /city.*state/i,
+    /salary.*expect/i,
+    /desired.*salary/i,
+    /\bsalary\b/i,
+    /\bcompensation\b/i,
+    /cover letter/i,
+  ];
 
   for (const field of schema) {
     const fieldLabel = field.label ?? field.name ?? field.id ?? '';
+    const fieldType = field.type ?? '';
+
+    // Skip file inputs and other non-textual inputs — they can never be graph-filled
+    if (UNFILLABLE_TYPES.has(fieldType)) continue;
+
+    // Skip generic placeholder labels — these are dropdown/UI chrome, not real questions
+    if (!fieldLabel || PLACEHOLDER_LABELS.test(fieldLabel.trim())) continue;
+
+    // Skip fields where the label is shorter than 3 chars (likely a widget artifact)
+    if (fieldLabel.trim().length < 3) continue;
 
     if (filledSelectors.has(field.selector)) {
       // Already filled by profile/RL — record provenance in background for debug panel
@@ -208,6 +243,10 @@ export async function applyGraphEnhancement(
       }
       continue;
     }
+
+    // Skip contextual questions that need specific answers — graph similarity can produce
+    // false positives here (e.g. matching a "No" sponsorship answer to a timeline question)
+    if (CONTEXTUAL_QUESTION_PATTERNS.some(re => re.test(fieldLabel))) continue;
 
     // Field is unfilled — ask background to look it up in the graph
     const canonicalField = detectFieldType(fieldLabel, field.type ?? '', field.name ?? '') || undefined;
@@ -264,8 +303,11 @@ export async function applyGraphEnhancement(
 function generateWhyAnswer(field: FieldSchema, profile: UserProfile): string | null {
   const label = (field.label || '').toLowerCase();
   
-  // Extract company name if possible
-  const companyMatch = field.label?.match(/why.*?(?:work at|join|interested in)\s+([A-Z][a-zA-Z]+)/i);
+  // Extract company name from label — handles "Why Anthropic?", "Why work at Stripe?",
+  // "Why are you interested in joining Google?", "Why do you want to work here at Meta?"
+  const companyMatch = field.label?.match(
+    /why\s+(?:work\s+at|join|do\s+you\s+want\s+to\s+(?:work\s+at|join)|are\s+you\s+interested\s+in\s+(?:joining)?)?\s*([A-Z][a-zA-Z0-9.]+)/i
+  );
   const companyName = companyMatch ? companyMatch[1] : 'this company';
   
   // Infer role focus from profile (engineering, product, design, etc.)
@@ -304,15 +346,32 @@ function generateWhyAnswer(field: FieldSchema, profile: UserProfile): string | n
     impactArea = 'user engagement and product quality';
   }
   
-  // Company-specific customizations
-  let missionSentence = `I'm excited about ${companyName}'s mission to build spaces where people can connect and collaborate.`;
-  
-  if (companyName.toLowerCase() === 'discord') {
-    missionSentence = "I'm excited about Discord's mission to create spaces where everyone can find belonging and build communities.";
-  }
-  
+  // Company-specific mission sentences — add entries here for companies you apply to often
+  const companyMissions: Record<string, string> = {
+    anthropic:  "I'm drawn to Anthropic's mission of responsible AI development for the long-term benefit of humanity — building AI systems that are safe, interpretable, and aligned with human values.",
+    openai:     "I'm excited about OpenAI's mission to ensure that artificial general intelligence benefits all of humanity.",
+    google:     "I'm excited about Google's mission to organize the world's information and make it universally accessible and useful.",
+    meta:       "I'm excited about Meta's mission to connect people and build the social infrastructure for a more connected world.",
+    apple:      "I'm excited about Apple's commitment to building products that enrich people's lives through the intersection of technology and the liberal arts.",
+    microsoft:  "I'm excited about Microsoft's mission to empower every person and every organization on the planet to achieve more.",
+    amazon:     "I'm excited about Amazon's relentless focus on customer obsession and its mission to be Earth's most customer-centric company.",
+    stripe:     "I'm excited about Stripe's mission to increase the GDP of the internet by making it easier for businesses of all sizes to accept payments.",
+    airbnb:     "I'm excited about Airbnb's mission to create a world where anyone can belong anywhere.",
+    discord:    "I'm excited about Discord's mission to create spaces where everyone can find belonging and build communities.",
+    netflix:    "I'm excited about Netflix's commitment to entertaining the world and delivering the best streaming experience to its members.",
+    spotify:    "I'm excited about Spotify's mission to unlock the potential of human creativity by giving a million creative artists the opportunity to live off their art.",
+    github:     "I'm excited about GitHub's mission to accelerate human progress by making software development more collaborative and accessible.",
+    figma:      "I'm excited about Figma's mission to make design accessible to everyone and transform how products are built through collaborative tools.",
+    notion:     "I'm excited about Notion's vision to build an all-in-one workspace that gives teams the tools they need to work better together.",
+    linear:     "I'm excited about Linear's commitment to building the future of software development tooling — fast, opinionated tools that help teams ship great products.",
+  };
+
+  const companyKey = companyName.toLowerCase();
+  const missionSentence = companyMissions[companyKey]
+    ?? `I'm excited about ${companyName}'s work and the opportunity to contribute to its mission.`;
+
   // Build the 3-sentence answer
-  const answer = `${missionSentence} My experience in ${roleFocus} aligns well with the challenges of serving hundreds of millions of users. I'm eager to contribute to ${impactArea} and help shape how people connect online.`;
+  const answer = `${missionSentence} My experience in ${roleFocus} aligns well with the technical challenges at ${companyName}. I'm eager to contribute to ${impactArea} and help the team deliver at scale.`;
   
   console.log(`[Autofill] Generated why answer for ${companyName} (${profile.professional.currentRole || 'role'})`);
   return answer;
