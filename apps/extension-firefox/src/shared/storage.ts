@@ -3,6 +3,8 @@
  */
 
 import type { ExtensionSettings, JobApplication, DailySummary } from './types';
+import { GRAPH_STORAGE_KEYS } from './graph/constants';
+import type { GraphMeta } from './graph/types';
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
   enabled: true,
@@ -458,4 +460,34 @@ export async function getApplicationTrends(): Promise<DailyTrend[]> {
     console.error('Failed to get application trends:', err);
     return [];
   }
+}
+
+
+// ── Graph storage helpers ──────────────────────────────────────────────────────
+
+/**
+ * Read the graph metadata (plaintext). Used for diagnostics and migration checks.
+ * Returns null if no graph has been initialized yet.
+ */
+export async function getGraphMeta(): Promise<GraphMeta | null> {
+  try {
+    const result = await browser.storage.local.get([GRAPH_STORAGE_KEYS.meta]);
+    return (result[GRAPH_STORAGE_KEYS.meta] as GraphMeta) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clear all graph data from storage (nodes, edges, meta, embedding cache).
+ * Use with caution — this is irreversible and resets all learned graph memory.
+ */
+export async function clearGraphData(): Promise<void> {
+  await browser.storage.local.remove([
+    GRAPH_STORAGE_KEYS.nodes,
+    GRAPH_STORAGE_KEYS.edges,
+    GRAPH_STORAGE_KEYS.meta,
+    GRAPH_STORAGE_KEYS.embeddingCache,
+  ]);
+  console.log('[Storage] Graph data cleared');
 }

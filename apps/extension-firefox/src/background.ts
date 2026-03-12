@@ -9,6 +9,7 @@ import { sendDailySummary } from './shared/whatsapp';
 import { mastraAgent as ollama } from './shared/mastra-agent';
 import { ragParser } from './shared/rag-parser';
 import { enrichParseErrorMessage } from './shared/error-classify';
+import { graphMemory } from './shared/graph/service';
 
 interface ConnectionState {
   connected: boolean;
@@ -455,6 +456,31 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
       };
     }
     
+    // ── Graph: record correction (sent from content script) ──────────────────
+    if (message.kind === 'GRAPH_RECORD_CORRECTION') {
+      const msg = message as any;
+      graphMemory.recordCorrection(
+        msg.questionText ?? '',
+        msg.canonicalField,
+        msg.originalValue ?? '',
+        msg.correctedValue ?? '',
+        {
+          company: msg.context?.company,
+          jobTitle: msg.context?.jobTitle,
+          url: msg.context?.url,
+          platform: msg.context?.platform,
+        }
+      );
+      return;
+    }
+
+    // ── Graph debug: "Why was this filled?" ───────────────────────────────────
+    if (message.kind === 'GRAPH_DEBUG_REQUEST') {
+      const msg = message as any;
+      const provenance = graphMemory.getLastFillProvenance(msg.label ?? '');
+      return { kind: 'GRAPH_DEBUG_RESPONSE', provenance };
+    }
+
     return;
   } catch (err) {
     error('Error handling message:', err);
@@ -504,6 +530,20 @@ function createContextMenus(): void {
     contexts: ['editable'],
   });
 
+  browser.menus.create({
+    id: 'offlyn-debug-separator',
+    parentId: 'offlyn-text-transform',
+    type: 'separator',
+    contexts: ['editable'],
+  });
+
+  browser.menus.create({
+    id: 'offlyn-debug-fill',
+    parentId: 'offlyn-text-transform',
+    title: 'Why was this filled?',
+    contexts: ['editable'],
+  });
+
   info('Context menus created');
 }
 
@@ -520,15 +560,24 @@ browser.menus.onClicked.addListener((menuInfo, tab) => {
   };
 
   const action = actionMap[menuInfo.menuItemId as string];
-  if (!action) return;
+  if (action) {
+    info(`Context menu: "${action}" on tab ${tab.id}`);
+    browser.tabs.sendMessage(tab.id, {
+      kind: 'TEXT_TRANSFORM',
+      action,
+    }, menuInfo.frameId != null ? { frameId: menuInfo.frameId } : undefined);
+    return;
+  }
 
-  info(`Context menu: "${action}" on tab ${tab.id}`);
-
-  // Send message to the content script in the active tab / frame
-  browser.tabs.sendMessage(tab.id, {
-    kind: 'TEXT_TRANSFORM',
-    action,
-  }, menuInfo.frameId != null ? { frameId: menuInfo.frameId } : undefined);
+  // Debug: "Why was this filled?"
+  if (menuInfo.menuItemId === 'offlyn-debug-fill') {
+    info(`Context menu: "debug-fill" on tab ${tab.id}`);
+    browser.tabs.sendMessage(
+      tab.id,
+      { kind: 'GRAPH_DEBUG_FIELD' },
+      menuInfo.frameId != null ? { frameId: menuInfo.frameId } : undefined
+    );
+  }
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -538,7 +587,10 @@ browser.menus.onClicked.addListener((menuInfo, tab) => {
  */
 async function init(): Promise<void> {
   log('Background script initializing...');
-  
+
+  // Initialize graph memory layer
+  await graphMemory.initialize();
+
   // Create right-click context menus
   createContextMenus();
   

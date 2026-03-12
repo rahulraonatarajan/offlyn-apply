@@ -8,6 +8,8 @@ import { isPhoneDetails, isLocationDetails } from './profile';
 import { getCountryCode, getPhoneNumber, parsePhoneNumber } from './phone-parser';
 import { validateFieldData } from './field-data-validator';
 import { rlSystem } from './learning-rl';
+import { graphMemory } from './graph/service';
+import { detectFieldType } from './context-aware-storage';
 
 /**
  * Generate fill mappings from profile and form schema
@@ -166,6 +168,71 @@ export function generateFillMappings(schema: FieldSchema[], profile: UserProfile
   console.log(`[Autofill] ══════════════════════════════`);
 
   return mappings;
+}
+
+/**
+ * Enhance fill mappings with graph memory lookups.
+ *
+ * Runs AFTER generateFillMappings() and fills in any fields that were
+ * left unmapped (value === null from profile matching) using the graph.
+ * Also records provenance for every filled field so the debug panel works.
+ *
+ * Returns an augmented copy of the mappings array — does not mutate the input.
+ */
+export async function applyGraphEnhancement(
+  schema: FieldSchema[],
+  existingMappings: FillMapping[],
+  context?: { platform?: string; company?: string; jobTitle?: string; url?: string }
+): Promise<FillMapping[]> {
+  const filledSelectors = new Set(existingMappings.map(m => m.selector));
+  const enhanced = [...existingMappings];
+
+  for (const field of schema) {
+    if (filledSelectors.has(field.selector)) {
+      // Already filled — record provenance for debug panel (source: profile/rl)
+      const existingMapping = existingMappings.find(m => m.selector === field.selector);
+      if (existingMapping) {
+        graphMemory.recordFillProvenance(field.label ?? field.selector, {
+          value: String(existingMapping.value),
+          source: 'profile',
+          confidence: 1.0,
+          resolvedAt: Date.now(),
+        });
+      }
+      continue;
+    }
+
+    // Field is unfilled — try graph lookup
+    const canonicalField = detectFieldType(field.label ?? '', field.type ?? '', field.name ?? '') || undefined;
+    const result = await graphMemory.getBestAnswerForField({
+      questionText: field.label ?? field.name ?? '',
+      canonicalField,
+      platform: context?.platform,
+      company: context?.company,
+      jobTitle: context?.jobTitle,
+      url: context?.url,
+    });
+
+    if (result.value && result.confidence >= 0.6) {
+      enhanced.push({ selector: field.selector, value: result.value });
+      console.log(
+        `[Autofill/Graph] Filled "${field.label}" via ${result.source} (confidence: ${result.confidence.toFixed(2)})`
+      );
+    }
+
+    // Always record provenance (even if null — so debug panel shows "not filled by Offlyn")
+    graphMemory.recordFillProvenance(field.label ?? field.selector, {
+      value: result.value ?? '',
+      source: result.selectionReason,
+      confidence: result.confidence,
+      matchedQuestionText: undefined,
+      matchedQuestionId: result.questionNodeId,
+      answerNodeId: result.answerNodeId,
+      resolvedAt: Date.now(),
+    });
+  }
+
+  return enhanced;
 }
 
 /**

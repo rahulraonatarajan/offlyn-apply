@@ -68,6 +68,9 @@ import {
   setReactCheckboxValue
 } from './shared/react-input';
 import { isWorkdayPage, detectWorkdayStep, runWorkdaySpecialHandlers } from './shared/workday-handler';
+import { applyGraphEnhancement } from './shared/autofill';
+import { detectFieldType } from './shared/context-aware-storage';
+import { showFillDebugPanel } from './ui/fill-debug-panel';
 
 const IS_TOP_FRAME = window.self === window.top;
 
@@ -76,6 +79,35 @@ let lastSchema: string | null = null;
 let resumeFilesUploaded: Set<string> = new Set(); // Track which file inputs we've already filled
 let filledSelectors: Set<string> = new Set(); // Track which fields have been filled
 let userEditedFields: Set<string> = new Set(); // Track which fields user has manually edited
+
+/** Tracks the last right-clicked editable field for the debug panel. */
+let lastRightClickedField: { selector: string; label: string; value: string } | null = null;
+
+// Capture the field under the cursor when the context menu opens
+document.addEventListener('contextmenu', (e) => {
+  const el = e.target as HTMLElement;
+  if (
+    el.tagName === 'INPUT' ||
+    el.tagName === 'TEXTAREA' ||
+    (el as HTMLElement).isContentEditable
+  ) {
+    const input = el as HTMLInputElement;
+    lastRightClickedField = {
+      selector: input.id
+        ? `#${CSS.escape(input.id)}`
+        : input.name
+          ? `[name="${CSS.escape(input.name)}"]`
+          : el.tagName.toLowerCase(),
+      label:
+        (el.closest('[data-label]') as HTMLElement | null)?.dataset.label ??
+        input.placeholder ??
+        input.name ??
+        input.id ??
+        '',
+      value: input.value ?? el.textContent ?? '',
+    };
+  }
+}, true);
 let allDetectedFields: ReturnType<typeof extractFormSchema> = []; // Store all detected fields
 let autofillInProgress = false; // Flag to prevent overwriting during autofill
 let autoFilledValues: Map<string, { field: FieldSchema; value: string | boolean }> = new Map(); // Track what we auto-filled
@@ -347,7 +379,20 @@ async function tryAutoFill(schema: ReturnType<typeof extractFormSchema>): Promis
       warn('Failed to migrate profile to contextual storage:', err);
     }
     
-    const mappings = generateFillMappings(schema, profile);
+    let mappings = generateFillMappings(schema, profile);
+
+    // Enhance with graph memory — fills any fields not matched by profile/RL
+    try {
+      mappings = await applyGraphEnhancement(schema, mappings, {
+        platform: lastJobMeta?.atsHint ?? undefined,
+        company: lastJobMeta?.company ?? undefined,
+        jobTitle: lastJobMeta?.jobTitle ?? undefined,
+        url: window.location.href,
+      });
+    } catch (err) {
+      warn('[Graph] Enhancement failed, continuing with profile mappings:', err);
+    }
+
     if (mappings.length === 0) {
       info('ℹ️ No fields matched profile data.');
       showNotification('No matches found', 'No fields could be auto-filled from your profile.', 'info');
@@ -1342,6 +1387,20 @@ async function learnFromCurrentFormValues(
           info(`[RL] Correction at submit — "${field.label}": "${autoStr}" → "${currentValue}"`);
           await rlSystem.recordCorrection(field, autoStr, currentValue, jobCtx);
           corrections++;
+          // Send graph correction to background (background owns graphMemory)
+          browser.runtime.sendMessage({
+            kind: 'GRAPH_RECORD_CORRECTION',
+            questionText: field.label ?? '',
+            canonicalField: detectFieldType(field.label ?? '', field.type ?? '', field.name ?? '') || undefined,
+            originalValue: autoStr,
+            correctedValue: currentValue,
+            context: {
+              company: lastJobMeta?.company ?? undefined,
+              jobTitle: lastJobMeta?.jobTitle ?? undefined,
+              url: window.location.href,
+              platform: lastJobMeta?.atsHint ?? undefined,
+            },
+          }).catch(() => {});
         } else {
           // User kept the autofilled value → success (positive signal)
           await rlSystem.recordSuccess(field, currentValue, jobCtx);
@@ -3523,6 +3582,25 @@ browser.runtime.onMessage.addListener((message: unknown) => {
         const action = (message as any).action as string;
         handleTextTransform(action);
         return Promise.resolve();
+      }
+
+      // Handle "Why was this filled?" debug panel trigger
+      if ((message as any).kind === 'GRAPH_DEBUG_FIELD') {
+        return (async () => {
+          if (!lastRightClickedField) return;
+          try {
+            const response = await browser.runtime.sendMessage({
+              kind: 'GRAPH_DEBUG_REQUEST',
+              label: lastRightClickedField.label,
+              currentValue: lastRightClickedField.value,
+            });
+            const provenance = (response as any)?.provenance ?? null;
+            const el = document.querySelector(lastRightClickedField.selector) as HTMLElement | null;
+            showFillDebugPanel(el ?? document.body, lastRightClickedField.label, provenance);
+          } catch (err) {
+            warn('[Graph] Debug panel error:', err);
+          }
+        })();
       }
     }
   } catch (err) {
