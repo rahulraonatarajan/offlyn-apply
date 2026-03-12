@@ -92,19 +92,44 @@ document.addEventListener('contextmenu', (e) => {
     (el as HTMLElement).isContentEditable
   ) {
     const input = el as HTMLInputElement;
+    const selector = input.id
+      ? `#${CSS.escape(input.id)}`
+      : input.name
+        ? `[name="${CSS.escape(input.name)}"]`
+        : el.tagName.toLowerCase();
+
+    // Try to find a richer label from already-detected field schema
+    const matchedSchema = allDetectedFields.find(f => f.selector === selector);
+
+    // Walk the DOM for an associated <label> element
+    const domLabel = (() => {
+      const id = input.id;
+      if (id) {
+        const labelEl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+        if (labelEl) return (labelEl.textContent ?? '').trim();
+      }
+      const closest = el.closest('.form-group, .field-wrapper, [class*="field"], [class*="form"], [class*="input"]');
+      if (closest) {
+        const lbl = closest.querySelector('label');
+        if (lbl) return (lbl.textContent ?? '').trim();
+      }
+      return '';
+    })();
+
+    const label =
+      matchedSchema?.label ||
+      (el.closest('[data-label]') as HTMLElement | null)?.dataset.label ||
+      input.getAttribute('aria-label') ||
+      domLabel ||
+      input.placeholder ||
+      input.name ||
+      input.id ||
+      '';
+
     lastRightClickedField = {
-      selector: input.id
-        ? `#${CSS.escape(input.id)}`
-        : input.name
-          ? `[name="${CSS.escape(input.name)}"]`
-          : el.tagName.toLowerCase(),
-      label:
-        (el.closest('[data-label]') as HTMLElement | null)?.dataset.label ??
-        input.placeholder ??
-        input.name ??
-        input.id ??
-        '',
-      value: input.value ?? el.textContent ?? '',
+      selector,
+      label,
+      value: input.value ?? (el as HTMLElement).textContent ?? '',
     };
   }
 }, true);
@@ -3618,6 +3643,89 @@ browser.runtime.onMessage.addListener((message: unknown) => {
             showFillDebugPanel(el ?? document.body, lastRightClickedField.label, provenance);
           } catch (err) {
             warn('[Graph] Debug panel error:', err);
+          }
+        })();
+      }
+
+      // Handle "Smart Fill this field" — generates an appropriately-sized answer via LLM
+      if ((message as any).kind === 'SMART_FILL_FIELD') {
+        return (async () => {
+          if (!lastRightClickedField) {
+            showWarning('Smart Fill', 'Could not identify the field. Try right-clicking directly on the input.');
+            return;
+          }
+
+          const { selector, label, value: currentValue } = lastRightClickedField;
+
+          // Find matching schema for richer field info (type, options)
+          const schema = allDetectedFields.find(f => f.selector === selector);
+          const fieldType = schema?.type ?? 'text';
+          const options: string[] = (schema as any)?.options ?? [];
+
+          // Find the DOM element
+          const el = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | null;
+          if (!el) {
+            showWarning('Smart Fill', 'Field not found. The page may have changed.');
+            return;
+          }
+
+          // Loading state — purple ring to distinguish from profile autofill
+          const originalBoxShadow = el.style.boxShadow;
+          el.style.transition = 'box-shadow 0.2s ease';
+          el.style.boxShadow = '0 0 0 3px rgba(124, 58, 237, 0.35)';
+          el.setAttribute('data-offlyn-loading', 'true');
+
+          showInfo('Smart Fill', `Generating answer for "${label || 'this field'}"…`);
+
+          try {
+            const response = await browser.runtime.sendMessage({
+              kind: 'SMART_FILL_QUERY',
+              label,
+              fieldType,
+              options,
+              currentValue,
+            }) as { value?: string; responseType?: string; error?: string } | undefined;
+
+            if (!response || response.error) {
+              showError('Smart Fill Failed', response?.error ?? 'No response from background.');
+              return;
+            }
+
+            const { value: answer, responseType } = response;
+            if (!answer?.trim()) {
+              showWarning('Smart Fill', 'The AI returned an empty answer. Try rephrasing the field label.');
+              return;
+            }
+
+            // Fill the field using the existing smart fill infrastructure
+            autofillInProgress = true;
+            const success = await smartFillField(el, answer, selector);
+            autofillInProgress = false;
+
+            if (success) {
+              const typeLabel =
+                responseType === 'yesno'  ? 'Yes/No answer' :
+                responseType === 'long'   ? 'detailed response' :
+                responseType === 'medium' ? 'short response' : 'value';
+              showSuccess('Smart Fill', `Filled with ${typeLabel}. Right-click → "Professional Fix" to refine.`);
+              // Teach the graph about this answer
+              browser.runtime.sendMessage({
+                kind: 'GRAPH_RECORD_ANSWER',
+                questionText: label,
+                value: answer,
+                source: 'llm',
+                canonicalField: null,
+              }).catch(() => {});
+            } else {
+              showWarning('Smart Fill', 'Could not fill the field — the page may be using a custom input widget.');
+            }
+          } catch (err) {
+            warn('[SmartFill] Error:', err);
+            showError('Smart Fill Error', 'An error occurred. Make sure Ollama is running.');
+          } finally {
+            autofillInProgress = false;
+            el.style.boxShadow = originalBoxShadow;
+            el.removeAttribute('data-offlyn-loading');
           }
         })();
       }

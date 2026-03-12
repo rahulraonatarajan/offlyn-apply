@@ -532,6 +532,74 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
       return { kind: 'GRAPH_SEED_FROM_PROFILE_ACK' };
     }
 
+    // ── Smart Fill: generate context-aware answer for a specific field ─────────
+    if (message.kind === 'SMART_FILL_QUERY') {
+      const msg = message as any;
+      const label: string = msg.label ?? '';
+      const fieldType: string = msg.fieldType ?? 'text';
+      const options: string[] = msg.options ?? [];
+      const currentValue: string = msg.currentValue ?? '';
+
+      const profile = await getUserProfile();
+      if (!profile) {
+        return { error: 'No profile found. Please set up your profile first.' };
+      }
+
+      // ── Classify response type based on the field ──
+      const classification = classifySmartFillResponse(label, fieldType, options);
+
+      // Build profile context (concise version for focused queries)
+      const phone = formatPhone(profile.personal.phone);
+      const location = formatLocation(profile.personal.location);
+      const latestJob = profile.work?.[0];
+      const profileSummary = [
+        `Name: ${profile.personal.firstName} ${profile.personal.lastName}`,
+        `Email: ${profile.personal.email}`,
+        `Phone: ${phone}`,
+        `Location: ${location}`,
+        `LinkedIn: ${profile.professional?.linkedin ?? 'n/a'}`,
+        `GitHub: ${profile.professional?.github ?? 'n/a'}`,
+        `Portfolio: ${profile.professional?.portfolio ?? 'n/a'}`,
+        `Current role: ${latestJob?.title ?? (profile.professional as any)?.currentRole ?? 'n/a'}`,
+        `Current company: ${latestJob?.company ?? 'n/a'}`,
+        `Years of experience: ${profile.professional?.yearsOfExperience ?? 'n/a'}`,
+        `Skills: ${(profile.skills ?? []).join(', ') || 'n/a'}`,
+        profile.summary ? `Summary: ${profile.summary}` : '',
+        `Work auth — requires sponsorship: ${profile.workAuth?.requiresSponsorship ? 'Yes' : 'No'}`,
+        `Work auth — legally authorized (US): ${profile.workAuth?.legallyAuthorized ? 'Yes' : 'No'}`,
+        profile.workAuth?.visaType ? `Visa: ${profile.workAuth.visaType}` : '',
+      ].filter(Boolean).join('\n');
+
+      const systemPrompt = `You are filling out a job application on behalf of this candidate.
+${classification.instruction}
+Respond with ONLY the answer — no labels, no quotes, no explanation, no punctuation around the answer.
+
+CANDIDATE PROFILE:
+${profileSummary}
+${currentValue ? `\nCurrent value in field (may be empty or incorrect): "${currentValue}"` : ''}`;
+
+      const userPrompt = options.length > 0
+        ? `Field: "${label}"\nAvailable options: ${options.join(', ')}\n\nChoose the single best option from the list above.`
+        : `Field: "${label}"`;
+
+      try {
+        const answer = await ollama.chat(
+          [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          { temperature: 0.05, timeout: 30000 }
+        );
+
+        const trimmed = answer.trim().replace(/^["']|["']$/g, '');
+        info(`[SmartFill] "${label}" → "${trimmed}" (${classification.responseType})`);
+        return { value: trimmed, responseType: classification.responseType };
+      } catch (llmErr) {
+        warn('[SmartFill] LLM error:', llmErr);
+        return { error: 'Ollama is not responding. Make sure it is running.' };
+      }
+    }
+
     // ── Chat with Resume: profile status check ────────────────────────────────
     if (message.kind === 'CHAT_PROFILE_STATUS') {
       const profile = await getUserProfile();
@@ -667,7 +735,21 @@ function createContextMenus(): void {
     contexts: ['editable'],
   });
 
-  // Sub-items
+  // Sub-items — Smart Fill first (primary action)
+  browser.menus.create({
+    id: 'offlyn-smart-fill',
+    parentId: 'offlyn-text-transform',
+    title: '✨ Smart Fill this field',
+    contexts: ['editable'],
+  });
+
+  browser.menus.create({
+    id: 'offlyn-smart-fill-separator',
+    parentId: 'offlyn-text-transform',
+    type: 'separator',
+    contexts: ['editable'],
+  });
+
   browser.menus.create({
     id: 'offlyn-professional-fix',
     parentId: 'offlyn-text-transform',
@@ -728,6 +810,17 @@ browser.menus.onClicked.addListener((menuInfo, tab) => {
     return;
   }
 
+  // Smart Fill: generate answer from profile + LLM for the right-clicked field
+  if (menuInfo.menuItemId === 'offlyn-smart-fill') {
+    info(`Context menu: "smart-fill" on tab ${tab.id}`);
+    browser.tabs.sendMessage(
+      tab.id,
+      { kind: 'SMART_FILL_FIELD' },
+      menuInfo.frameId != null ? { frameId: menuInfo.frameId } : undefined
+    );
+    return;
+  }
+
   // Debug: "Why was this filled?"
   if (menuInfo.menuItemId === 'offlyn-debug-fill') {
     info(`Context menu: "debug-fill" on tab ${tab.id}`);
@@ -738,6 +831,91 @@ browser.menus.onClicked.addListener((menuInfo, tab) => {
     );
   }
 });
+
+// ── Smart Fill response classifier ─────────────────────────────────────────
+
+/**
+ * Determines what kind of answer a field expects so the LLM prompt gives
+ * appropriately-sized output. Never write an essay for a Yes/No question.
+ */
+function classifySmartFillResponse(
+  label: string,
+  fieldType: string,
+  options: string[]
+): { responseType: 'yesno' | 'short' | 'medium' | 'long'; instruction: string } {
+  const l = label.toLowerCase();
+
+  // ── Yes / No ──────────────────────────────────────────────────────────────
+  // 1. Explicit two-option dropdown with Yes and No
+  if (
+    options.length === 2 &&
+    options.some(o => /^yes$/i.test(o.trim())) &&
+    options.some(o => /^no$/i.test(o.trim()))
+  ) {
+    return { responseType: 'yesno', instruction: 'Answer with exactly one word: either "Yes" or "No".' };
+  }
+  // 2. Question starting with interrogative verbs
+  if (/^(do you|are you|have you|will you|would you|can you|did you|is this|does this|were you|is your|has your)/i.test(l)) {
+    return { responseType: 'yesno', instruction: 'Answer with exactly one word: either "Yes" or "No".' };
+  }
+
+  // ── Single-value short fields ─────────────────────────────────────────────
+  const shortPatterns = [
+    /\b(first name|last name|full name|middle name)\b/i,
+    /\b(email|e-mail)\b/i,
+    /\b(phone|telephone|mobile)\b/i,
+    /\b(city|state|country|zip|postal code|address)\b/i,
+    /\b(linkedin|github|portfolio|website|url)\b/i,
+    /\b(job title|current title|position|role)\b/i,
+    /\b(company|employer|organization)\b/i,
+    /\b(salary|compensation|pay|rate)\b/i,
+    /\b(date|start date|end date|graduation)\b/i,
+    /\b(degree|major|field of study|gpa)\b/i,
+    /\b(years of experience|experience years)\b/i,
+    /\b(visa|work authorization|citizenship)\b/i,
+  ];
+  if (shortPatterns.some(re => re.test(l))) {
+    return {
+      responseType: 'short',
+      instruction: 'Answer with just the value — no explanation, no punctuation, no extra words.',
+    };
+  }
+
+  // ── Long-form textarea fields ─────────────────────────────────────────────
+  const longPatterns = [
+    /cover letter/i,
+    /personal statement/i,
+    /\bdescribe\b.{0,40}\b(yourself|background|experience|career|role|project)\b/i,
+    /tell us (about|why|what)/i,
+    /\babout yourself\b/i,
+    /\bprofessional summary\b/i,
+    /\bmotivation\b/i,
+    /\bessay\b/i,
+    /\badditional information\b/i,
+    /\bsupplemental\b/i,
+    /\bwork samples?\b/i,
+  ];
+  if (fieldType === 'textarea' && longPatterns.some(re => re.test(l))) {
+    return {
+      responseType: 'long',
+      instruction: 'Write a detailed, professional 2-3 paragraph response (150-250 words). Use first person.',
+    };
+  }
+
+  // ── Medium: short descriptive questions and un-matched textareas ──────────
+  if (fieldType === 'textarea' || l.length > 60) {
+    return {
+      responseType: 'medium',
+      instruction: 'Write 2-3 concise professional sentences (40-80 words). Be specific and direct.',
+    };
+  }
+
+  // ── Default: short answer ─────────────────────────────────────────────────
+  return {
+    responseType: 'short',
+    instruction: 'Answer with just the value — no explanation, no punctuation, no extra words.',
+  };
+}
 
 // ── Graph profile seeding ───────────────────────────────────────────────────
 
