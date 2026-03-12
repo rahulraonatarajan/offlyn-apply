@@ -990,6 +990,356 @@ function initFlowchartFromData(
   requestAnimationFrame(() => fitFlowchart());
 }
 
+// ── Export / Import ───────────────────────────────────────────────────────────
+
+function showToast(msg: string, type: 'success' | 'error' | '' = ''): void {
+  const el = document.getElementById('io-toast')!;
+  el.textContent = msg;
+  el.className = `io-toast ${type} show`;
+  setTimeout(() => { el.className = 'io-toast'; }, 3200);
+}
+
+function downloadFile(content: string, filename: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+}
+
+function datestamp(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// CSV helpers
+function csvEscape(v: unknown): string {
+  const s = String(v ?? '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+function csvRow(...cols: unknown[]): string {
+  return cols.map(csvEscape).join(',');
+}
+
+async function exportAllJSON(): Promise<void> {
+  const stored = await browser.storage.local.get([
+    STORAGE.profile,
+    STORAGE.graphNodes,
+    STORAGE.graphEdges,
+    STORAGE.graphMeta,
+    STORAGE.rlPatterns,
+    STORAGE.rlCorrections,
+  ]);
+
+  const payload = {
+    version: '1.0',
+    exportedAt: new Date().toISOString(),
+    profile: stored[STORAGE.profile] ?? null,
+    graph: {
+      nodes: stored[STORAGE.graphNodes] ?? {},
+      edges: stored[STORAGE.graphEdges] ?? {},
+      meta:  stored[STORAGE.graphMeta]  ?? {},
+    },
+    rl: {
+      patterns:    stored[STORAGE.rlPatterns]    ?? [],
+      corrections: stored[STORAGE.rlCorrections] ?? [],
+    },
+  };
+
+  downloadFile(
+    JSON.stringify(payload, null, 2),
+    `offlyn-data-${datestamp()}.json`,
+    'application/json'
+  );
+  showToast('✓ Full export downloaded', 'success');
+}
+
+async function exportNodesCSV(): Promise<void> {
+  const stored = await browser.storage.local.get(STORAGE.graphNodes);
+  const nodes = Object.values((stored[STORAGE.graphNodes] ?? {}) as Record<string, GraphNode>);
+
+  if (!nodes.length) { showToast('No graph nodes to export', 'error'); return; }
+
+  const header = csvRow(
+    'id', 'type', 'createdAt', 'updatedAt',
+    // Question fields
+    'q_rawText', 'q_normalizedText', 'q_canonicalField', 'q_platform',
+    // Answer fields
+    'a_value', 'a_source', 'a_confidence', 'a_usageCount', 'a_lastUsedAt', 'a_selectionReason',
+    // Field fields
+    'f_canonicalField', 'f_aliases',
+    // Correction fields
+    'c_originalValue', 'c_correctedValue', 'c_company', 'c_jobTitle', 'c_url', 'c_platform',
+    // Application fields
+    'ap_company', 'ap_jobTitle', 'ap_url', 'ap_platform'
+  );
+
+  const rows = nodes.map(n => {
+    const p = n.payload as any;
+    return csvRow(
+      n.id, n.type,
+      new Date(n.createdAt).toISOString(),
+      new Date(n.updatedAt).toISOString(),
+      // question
+      n.type === 'question' ? p.rawText ?? '' : '',
+      n.type === 'question' ? p.normalizedText ?? '' : '',
+      n.type === 'question' ? p.canonicalField ?? '' : '',
+      n.type === 'question' ? p.platform ?? '' : '',
+      // answer
+      n.type === 'answer' ? p.value ?? '' : '',
+      n.type === 'answer' ? p.source ?? '' : '',
+      n.type === 'answer' ? p.confidence ?? '' : '',
+      n.type === 'answer' ? p.usageCount ?? 0 : '',
+      n.type === 'answer' ? (p.lastUsedAt ? new Date(p.lastUsedAt).toISOString() : '') : '',
+      n.type === 'answer' ? p.selectionReason ?? '' : '',
+      // field
+      n.type === 'field' ? p.canonicalField ?? '' : '',
+      n.type === 'field' ? (p.aliases ?? []).join('; ') : '',
+      // correction
+      n.type === 'correction' ? p.originalValue ?? '' : '',
+      n.type === 'correction' ? p.correctedValue ?? '' : '',
+      n.type === 'correction' ? p.context?.company ?? '' : '',
+      n.type === 'correction' ? p.context?.jobTitle ?? '' : '',
+      n.type === 'correction' ? p.context?.url ?? '' : '',
+      n.type === 'correction' ? p.context?.platform ?? '' : '',
+      // application
+      n.type === 'application' ? p.company ?? '' : '',
+      n.type === 'application' ? p.jobTitle ?? '' : '',
+      n.type === 'application' ? p.url ?? '' : '',
+      n.type === 'application' ? p.platform ?? '' : '',
+    );
+  });
+
+  downloadFile(
+    [header, ...rows].join('\n'),
+    `offlyn-graph-nodes-${datestamp()}.csv`,
+    'text/csv'
+  );
+  showToast(`✓ ${nodes.length} nodes exported`, 'success');
+}
+
+async function exportEdgesCSV(): Promise<void> {
+  const stored = await browser.storage.local.get([STORAGE.graphEdges, STORAGE.graphNodes]);
+  const edges = Object.values((stored[STORAGE.graphEdges] ?? {}) as Record<string, GraphEdge>);
+  const nodes = (stored[STORAGE.graphNodes] ?? {}) as Record<string, GraphNode>;
+
+  if (!edges.length) { showToast('No graph edges to export', 'error'); return; }
+
+  // Helper to get a short label for a node
+  const nodeLabel2 = (id: string): string => {
+    const n = nodes[id];
+    if (!n) return id.slice(0, 20);
+    const p = n.payload as any;
+    return String(
+      p.rawText ?? p.value ?? p.canonicalField ?? p.company ?? p.correctedValue ?? id
+    ).slice(0, 60);
+  };
+
+  const header = csvRow(
+    'id', 'type', 'from', 'fromType', 'fromLabel',
+    'to', 'toType', 'toLabel',
+    'weight', 'createdAt', 'updatedAt',
+    'meta_similarityScore', 'meta_platform', 'meta_successCount'
+  );
+
+  const rows = edges.map(e => {
+    const fn = nodes[e.from];
+    const tn = nodes[e.to];
+    return csvRow(
+      e.id, e.type,
+      e.from, fn?.type ?? '', nodeLabel2(e.from),
+      e.to,   tn?.type ?? '', nodeLabel2(e.to),
+      e.weight,
+      new Date(e.createdAt).toISOString(),
+      new Date(e.updatedAt).toISOString(),
+      e.metadata?.similarityScore ?? '',
+      e.metadata?.platform ?? '',
+      e.metadata?.successCount ?? '',
+    );
+  });
+
+  downloadFile(
+    [header, ...rows].join('\n'),
+    `offlyn-graph-edges-${datestamp()}.csv`,
+    'text/csv'
+  );
+  showToast(`✓ ${edges.length} edges exported`, 'success');
+}
+
+async function exportRLCSV(): Promise<void> {
+  const stored = await browser.storage.local.get([STORAGE.rlPatterns, STORAGE.rlCorrections]);
+  const patterns = (stored[STORAGE.rlPatterns] ?? []) as any[];
+  const corrections = (stored[STORAGE.rlCorrections] ?? []) as any[];
+
+  if (!patterns.length && !corrections.length) {
+    showToast('No RL data to export', 'error'); return;
+  }
+
+  // Patterns sheet
+  const pHeader = csvRow(
+    'id', 'fieldType', 'fieldLabel', 'learnedValue', 'originalValue',
+    'confidence', 'successCount', 'failureCount', 'lastUsed', 'createdAt'
+  );
+  const pRows = patterns.map((p: any) => csvRow(
+    p.id ?? '', p.fieldType ?? '', p.fieldLabel ?? '',
+    p.learnedValue ?? '', p.originalValue ?? '',
+    p.confidence ?? '', p.successCount ?? 0, p.failureCount ?? 0,
+    p.lastUsed ? new Date(p.lastUsed).toISOString() : '',
+    p.createdAt ? new Date(p.createdAt).toISOString() : '',
+  ));
+
+  // Corrections sheet
+  const cHeader = csvRow(
+    'id', 'fieldType', 'fieldLabel', 'autoFilledValue', 'userCorrectedValue',
+    'timestamp', 'patternId', 'company', 'jobTitle', 'url'
+  );
+  const cRows = corrections.map((c: any) => csvRow(
+    c.id ?? '', c.fieldType ?? '', c.fieldLabel ?? '',
+    c.autoFilledValue ?? '', c.userCorrectedValue ?? '',
+    c.timestamp ? new Date(c.timestamp).toISOString() : '',
+    c.patternId ?? '',
+    c.context?.company ?? '', c.context?.jobTitle ?? '', c.context?.url ?? '',
+  ));
+
+  // Combine into one CSV with section headers
+  const combined = [
+    '# RL LEARNED PATTERNS',
+    pHeader,
+    ...pRows,
+    '',
+    '# RL CORRECTION EVENTS',
+    cHeader,
+    ...cRows,
+  ].join('\n');
+
+  downloadFile(
+    combined,
+    `offlyn-rl-patterns-${datestamp()}.csv`,
+    'text/csv'
+  );
+  showToast(`✓ ${patterns.length} patterns + ${corrections.length} corrections exported`, 'success');
+}
+
+// ── Import ────────────────────────────────────────────────────────────────────
+
+let _importFileData: string | null = null;
+
+function openImportModal(): void {
+  _importFileData = null;
+  (document.getElementById('import-file-input') as HTMLInputElement).value = '';
+  document.getElementById('import-file-name')!.style.display = 'none';
+  (document.getElementById('import-confirm') as HTMLButtonElement).disabled = true;
+  document.getElementById('import-modal')!.classList.add('open');
+}
+
+function closeImportModal(): void {
+  document.getElementById('import-modal')!.classList.remove('open');
+  _importFileData = null;
+}
+
+function handleImportFile(file: File): void {
+  if (!file.name.endsWith('.json')) {
+    showToast('Please select a .json file', 'error'); return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    _importFileData = e.target?.result as string ?? null;
+    const nameEl = document.getElementById('import-file-name')!;
+    nameEl.textContent = `✓ ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    nameEl.style.display = 'block';
+    (document.getElementById('import-confirm') as HTMLButtonElement).disabled = false;
+  };
+  reader.readAsText(file);
+}
+
+async function confirmImport(): Promise<void> {
+  if (!_importFileData) return;
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(_importFileData);
+  } catch {
+    showToast('Invalid JSON — file could not be parsed', 'error');
+    return;
+  }
+
+  if (!parsed.version || !parsed.exportedAt) {
+    showToast('Not a valid Offlyn export file', 'error');
+    return;
+  }
+
+  const importGraph   = (document.getElementById('import-opt-graph') as HTMLInputElement).checked;
+  const importRL      = (document.getElementById('import-opt-rl') as HTMLInputElement).checked;
+  const importProfile = (document.getElementById('import-opt-profile') as HTMLInputElement).checked;
+
+  const writes: Record<string, unknown> = {};
+
+  if (importGraph && parsed.graph) {
+    if (parsed.graph.nodes) writes[STORAGE.graphNodes] = parsed.graph.nodes;
+    if (parsed.graph.edges) writes[STORAGE.graphEdges] = parsed.graph.edges;
+    if (parsed.graph.meta)  writes[STORAGE.graphMeta]  = parsed.graph.meta;
+  }
+  if (importRL && parsed.rl) {
+    if (parsed.rl.patterns)    writes[STORAGE.rlPatterns]    = parsed.rl.patterns;
+    if (parsed.rl.corrections) writes[STORAGE.rlCorrections] = parsed.rl.corrections;
+  }
+  if (importProfile && parsed.profile) {
+    writes[STORAGE.profile] = parsed.profile;
+  }
+
+  if (!Object.keys(writes).length) {
+    showToast('Nothing to import — check your selections', 'error'); return;
+  }
+
+  try {
+    await browser.storage.local.set(writes);
+    closeImportModal();
+    showToast('✓ Import successful — refreshing…', 'success');
+    setTimeout(() => loadAll(), 800);
+  } catch (err) {
+    showToast('Import failed: ' + String(err), 'error');
+  }
+}
+
+function initExportImport(): void {
+  document.getElementById('btn-export-json')?.addEventListener('click', exportAllJSON);
+  document.getElementById('btn-export-nodes-csv')?.addEventListener('click', exportNodesCSV);
+  document.getElementById('btn-export-edges-csv')?.addEventListener('click', exportEdgesCSV);
+  document.getElementById('btn-export-rl-csv')?.addEventListener('click', exportRLCSV);
+  document.getElementById('btn-import-json')?.addEventListener('click', openImportModal);
+
+  document.getElementById('import-cancel')?.addEventListener('click', closeImportModal);
+  document.getElementById('import-modal')?.addEventListener('click', (e) => {
+    if ((e.target as Element).id === 'import-modal') closeImportModal();
+  });
+  document.getElementById('import-confirm')?.addEventListener('click', confirmImport);
+
+  // File input
+  const fileInput = document.getElementById('import-file-input') as HTMLInputElement;
+  fileInput?.addEventListener('change', () => {
+    if (fileInput.files?.[0]) handleImportFile(fileInput.files[0]);
+  });
+
+  // Drag and drop
+  const dropZone = document.getElementById('import-drop-zone')!;
+  dropZone?.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone?.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone?.addEventListener('drop', (e: DragEvent) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer?.files[0];
+    if (file) handleImportFile(file);
+  });
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function loadAll(): Promise<void> {
@@ -1016,6 +1366,7 @@ async function loadAll(): Promise<void> {
 function init(): void {
   initTabs();
   initFlowchartInteraction();
+  initExportImport();
 
   // Re-run layout when Relationships tab becomes visible (so we have correct dimensions)
   document.querySelectorAll<HTMLButtonElement>('.tab').forEach(tab => {

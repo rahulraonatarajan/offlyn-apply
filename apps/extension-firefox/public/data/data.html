@@ -700,6 +700,167 @@
     .flowchart-empty h3 { font-size: 16px; font-weight: 700; color: var(--text); }
     .flowchart-empty p  { font-size: 13px; line-height: 1.6; max-width: 300px; }
 
+    /* ── Export / Import panel ───────────────────────────────── */
+    .io-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .io-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 13px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .io-btn-export {
+      background: #1e293b;
+      color: #fff;
+      border-color: #1e293b;
+    }
+    .io-btn-export:hover { background: #334155; border-color: #334155; }
+    html.dark .io-btn-export { background: #334155; border-color: #475569; }
+    .io-btn-secondary {
+      background: var(--surface2);
+      color: var(--text-muted);
+      border-color: var(--border);
+    }
+    .io-btn-secondary:hover { background: var(--border); color: var(--text); }
+    .io-btn-import {
+      background: var(--purple-bg);
+      color: var(--purple);
+      border-color: var(--purple-border);
+    }
+    .io-btn-import:hover { opacity: .85; }
+    html.dark .io-btn-import { color: #a78bfa; }
+    .io-sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+
+    /* Import modal overlay */
+    .io-modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .io-modal-overlay.open { display: flex; }
+    .io-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 480px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+    .io-modal h3 { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .io-modal p  { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; margin-bottom: 14px; }
+    .io-modal-opts {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .io-modal-opt {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    .io-modal-opt:has(input:checked) { border-color: #1e293b; }
+    html.dark .io-modal-opt:has(input:checked) { border-color: #60a5fa; }
+    .io-modal-opt input { margin-top: 2px; accent-color: #1e293b; flex-shrink: 0; }
+    .io-modal-opt-body strong { display: block; font-size: 13px; font-weight: 700; color: var(--text); }
+    .io-modal-opt-body span { font-size: 11.5px; color: var(--text-muted); }
+    .io-drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      margin-bottom: 14px;
+    }
+    .io-drop-zone.drag-over {
+      border-color: #3b82f6;
+      background: var(--blue-bg);
+      color: var(--blue);
+    }
+    .io-drop-zone input { display: none; }
+    .io-drop-zone-icon { font-size: 28px; margin-bottom: 6px; }
+    .io-file-selected {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--green);
+      margin-top: 6px;
+    }
+    html.dark .io-file-selected { color: #4ade80; }
+    .io-modal-footer {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .io-modal-cancel {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface2);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .io-modal-confirm {
+      padding: 8px 20px;
+      border: none;
+      border-radius: 8px;
+      background: #1e293b;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .io-modal-confirm:hover { background: #334155; }
+    .io-modal-confirm:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* Toast notification */
+    .io-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #1e293b;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 4px 20px rgba(0,0,0,.25);
+      opacity: 0;
+      transition: opacity .2s, transform .2s;
+      z-index: 2000;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .io-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .io-toast.success { background: #15803d; }
+    .io-toast.error   { background: #b91c1c; }
+
     /* ── Scrollbar ───────────────────────────────────────────── */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -746,6 +907,29 @@
     <button class="tab" data-tab="flowchart">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 12h10M17 7l-8 4M17 17l-8-4"/></svg>
       Relationships
+    </button>
+  </div>
+
+  <!-- Export / Import toolbar -->
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;">
+    <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);margin-right:2px;">Export</span>
+    <button class="io-btn io-btn-export" id="btn-export-json">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      All Data (JSON)
+    </button>
+    <button class="io-btn io-btn-secondary" id="btn-export-nodes-csv">
+      Nodes CSV
+    </button>
+    <button class="io-btn io-btn-secondary" id="btn-export-edges-csv">
+      Edges CSV
+    </button>
+    <button class="io-btn io-btn-secondary" id="btn-export-rl-csv">
+      RL Patterns CSV
+    </button>
+    <div class="io-sep"></div>
+    <button class="io-btn io-btn-import" id="btn-import-json">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Import JSON
     </button>
   </div>
 
@@ -926,6 +1110,53 @@
   <div class="fc-node-tooltip" id="fc-tooltip"></div>
 
 </div>
+
+<!-- Import JSON modal -->
+<div class="io-modal-overlay" id="import-modal">
+  <div class="io-modal">
+    <h3>Import Data</h3>
+    <p>Upload a previously exported <code>offlyn-data-*.json</code> file. Choose which sections to restore — existing data will be <strong>replaced</strong> for those sections.</p>
+
+    <div class="io-modal-opts">
+      <label class="io-modal-opt">
+        <input type="checkbox" id="import-opt-graph" checked>
+        <div class="io-modal-opt-body">
+          <strong>Graph Memory (nodes &amp; edges)</strong>
+          <span>Restores your question → answer relationships and field mappings.</span>
+        </div>
+      </label>
+      <label class="io-modal-opt">
+        <input type="checkbox" id="import-opt-rl" checked>
+        <div class="io-modal-opt-body">
+          <strong>RL Patterns &amp; Corrections</strong>
+          <span>Restores learned autofill patterns and correction history.</span>
+        </div>
+      </label>
+      <label class="io-modal-opt">
+        <input type="checkbox" id="import-opt-profile">
+        <div class="io-modal-opt-body">
+          <strong>Profile</strong>
+          <span>Replaces your current profile with the one in the export file.</span>
+        </div>
+      </label>
+    </div>
+
+    <label class="io-drop-zone" id="import-drop-zone">
+      <div class="io-drop-zone-icon">📂</div>
+      <div>Drop your <strong>.json</strong> file here or click to browse</div>
+      <div class="io-file-selected" id="import-file-name" style="display:none;"></div>
+      <input type="file" id="import-file-input" accept=".json,application/json">
+    </label>
+
+    <div class="io-modal-footer">
+      <button class="io-modal-cancel" id="import-cancel">Cancel</button>
+      <button class="io-modal-confirm" id="import-confirm" disabled>Import Selected</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="io-toast" id="io-toast"></div>
 
 <script src="data.js"></script>
 <script src="../shared/dark-mode.js"></script>
