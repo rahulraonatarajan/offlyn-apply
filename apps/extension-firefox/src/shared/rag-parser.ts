@@ -306,7 +306,12 @@ Return ONLY the JSON (no markdown, no explanations):`;
     const personalData = await this.extractWithRAG(
       personalQuery,
       `Extract personal/contact information from the resume.
-Return JSON: {"firstName":"","lastName":"","email":"","phone":"","location":""}`,
+Rules for names:
+- firstName: given name only (e.g. "Joel")
+- middleName: middle name if present, otherwise ""  (e.g. "Nishanth")
+- lastName: family/surname only — never include middle names here (e.g. "Ponukumatla")
+- If the person has only two names (no middle), put them in firstName and lastName only.
+Return JSON: {"firstName":"","middleName":"","lastName":"","email":"","phone":"","location":""}`,
       3
     );
     if (personalData) {
@@ -350,15 +355,34 @@ Return JSON array: ["skill1","skill2","tool1","language1"]`,
     const workQuery = 'work experience employment job history positions roles responsibilities duties achievements';
     const workData = await this.extractWithRAG(
       workQuery,
-      `Extract ALL work experience entries with complete details.
-For each job, include: company name, job title, start date, end date, whether it's current, and DETAILED description of all duties and achievements.
-Return JSON array: [{"company":"","title":"","startDate":"","endDate":"","current":false,"description":""}]`,
+      `Extract TOP-LEVEL job positions from the resume work experience section.
+
+Rules:
+- Only include entries that represent an actual employed position with a real employer.
+- Every entry MUST have a startDate in "YYYY-MM" or "Month YYYY" format. If no date exists, skip that entry.
+- Do NOT extract sub-responsibilities, project names, initiative names, or bullet points as separate job entries.
+- Do NOT include education entries (degrees, courses) as work entries.
+- Do NOT include the person's own name as a company name.
+- Deduplicate: if the same company+title appears more than once, include it only once.
+- description: combine ALL bullet points and achievements for that role into one string.
+
+Return JSON array: [{"company":"","title":"","startDate":"YYYY-MM","endDate":"YYYY-MM or null","current":false,"description":""}]
+If no valid dated work experience found, return [].`,
       7
     );
     if (workData && Array.isArray(workData)) {
-      profile.work = workData;
-      const jobs = workData.map((j: any) => `${j.title} @ ${j.company}`).slice(0, 3);
-      onProgress?.(`Found ${workData.length} positions`, 87, jobs.join(' | '));
+      // Filter out any entries the LLM still returned without a startDate
+      const validWork = workData.filter((j: any) => j.company && j.title && j.startDate && String(j.startDate).trim());
+      // Deduplicate by company+title (case-insensitive)
+      const seen = new Set<string>();
+      profile.work = validWork.filter((j: any) => {
+        const key = `${j.company}|${j.title}`.toLowerCase().trim();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      const jobs = profile.work.map((j: any) => `${j.title} @ ${j.company}`).slice(0, 3);
+      onProgress?.(`Found ${profile.work.length} positions`, 87, jobs.join(' | '));
     }
 
     // 5. Extract education

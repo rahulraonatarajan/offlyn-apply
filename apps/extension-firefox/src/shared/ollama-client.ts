@@ -206,25 +206,31 @@ export class OllamaClient {
   ): Promise<any> {
     const prompts = {
       personal: `Extract ONLY personal contact information from this text.
-Return JSON in this exact format: {"firstName":"John","lastName":"Doe","email":"email@example.com","phone":"+1234567890","location":"City, State"}
+Name rules:
+- firstName: given name only (e.g. "Joel")
+- middleName: middle name if present, otherwise ""
+- lastName: family/surname ONLY — never include middle names here (e.g. "Ponukumatla")
+Return JSON in this exact format: {"firstName":"John","middleName":"","lastName":"Doe","email":"email@example.com","phone":"+1234567890","location":"City, State"}
 If a field is missing, use an empty string "".`,
       
       professional: `Extract ONLY professional online profiles and links from this text.
 Return JSON in this exact format: {"linkedin":"https://linkedin.com/in/username","github":"https://github.com/username","portfolio":"https://example.com","yearsOfExperience":5}
 For LinkedIn, extract the full URL if present. For yearsOfExperience, calculate from dates if shown. Use 0 if not clear.`,
       
-      experience: `Extract ALL work experience entries from this text. For each job, extract:
-- Company/Employer name (the organization name)
-- Job title/position
-- Start date (format: "Month Year" or "YYYY")
-- End date (format: "Month Year" or "YYYY", or "Present" if current)
-- Whether it's current position (true/false)
-- Detailed description of job duties, responsibilities, and achievements (extract ALL bullet points and descriptions)
+      experience: `Extract TOP-LEVEL job positions from this text.
+
+Rules:
+- Only include entries that represent an actual employed position at a real employer.
+- Every entry MUST have a startDate. If no start date exists for an entry, skip it entirely.
+- Do NOT extract sub-responsibilities, project names, initiative titles, or bullet points as separate job entries.
+- Do NOT include education entries (degrees, courses) as work entries.
+- Do NOT use the person's own name as a company name.
+- description: combine ALL bullet points and achievements for that role into one string.
 
 Return JSON array in this exact format:
-[{"company":"Company Name","title":"Job Title","startDate":"Jan 2020","endDate":"Dec 2022","current":false,"description":"Complete list of duties: • Duty 1 • Duty 2 • Achievement 1"}]
+[{"company":"Company Name","title":"Job Title","startDate":"Jan 2020","endDate":"Dec 2022","current":false,"description":"Complete list of duties: • Duty 1 • Duty 2"}]
 
-If no work experience found, return empty array [].`,
+If no valid dated work experience found, return empty array [].`,
       
       education: `Extract ALL education entries from this text.
 Return JSON array in this exact format: [{"school":"University Name","degree":"Bachelor of Science","field":"Computer Science","graduationYear":"2020"}]
@@ -349,6 +355,15 @@ Be thorough and capture ALL details. Return ONLY valid JSON with no markdown for
         }
       }
     }
+    // Filter phantom entries (no startDate) and deduplicate by company+title
+    profile.work = profile.work.filter((j: any) => j.company && j.title && j.startDate && String(j.startDate).trim());
+    const workSeen = new Set<string>();
+    profile.work = profile.work.filter((j: any) => {
+      const key = `${j.company}|${j.title}`.toLowerCase().trim();
+      if (workSeen.has(key)) return false;
+      workSeen.add(key);
+      return true;
+    });
 
     // Stage 5: Extract education
     onProgress?.('Extracting education...', 90);
@@ -389,8 +404,9 @@ Return ONLY valid JSON. Never include markdown, explanations, or any text outsid
 
 {
   "personal": {
-    "firstName": "Full first name",
-    "lastName": "Full last name", 
+    "firstName": "Given name only (e.g. Joel)",
+    "middleName": "Middle name if present, otherwise empty string",
+    "lastName": "Family/surname ONLY — never include middle names here (e.g. Ponukumatla)",
     "email": "email@example.com",
     "phone": "+1234567890",
     "location": "City, State/Country"
@@ -406,8 +422,8 @@ Return ONLY valid JSON. Never include markdown, explanations, or any text outsid
     {
       "company": "Complete employer/company name",
       "title": "Complete job title",
-      "startDate": "Month Year or YYYY",
-      "endDate": "Month Year or Present",
+      "startDate": "YYYY-MM (required — omit this entry entirely if no date)",
+      "endDate": "YYYY-MM or null if current",
       "current": true_or_false,
       "description": "COMPLETE detailed description including ALL job duties, responsibilities, achievements, and bullet points from the resume"
     }
@@ -424,7 +440,9 @@ Return ONLY valid JSON. Never include markdown, explanations, or any text outsid
 }
 
 IMPORTANT:
-- For work experience, extract the COMPLETE employer name exactly as written
+- firstName/lastName: put the family name ONLY in lastName; if a middle name exists, put it in middleName
+- For work: only include TOP-LEVEL job positions with actual employment dates — do NOT extract sub-responsibilities, project names, or initiative titles as separate entries; do NOT use the person's own name as a company
+- Every work entry MUST have startDate — omit the entry entirely if there is no start date
 - For job descriptions, include ALL duties, achievements, and bullet points (not just a summary)
 - For LinkedIn, extract the FULL URL if present
 - Extract ALL skills mentioned (technical, soft skills, tools, languages)

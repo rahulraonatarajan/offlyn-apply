@@ -3,7 +3,7 @@
  */
 
 import type { UserProfile, PhoneDetails, LocationDetails, SelfIdentification } from '../shared/profile';
-import { saveUserProfile, isPhoneDetails, isLocationDetails, formatPhone, formatLocation } from '../shared/profile';
+import { saveUserProfile, normalizeProfile, isPhoneDetails, isLocationDetails, formatPhone, formatLocation } from '../shared/profile';
 import { rlSystem } from '../shared/learning-rl';
 import type { LearnedPattern } from '../shared/learning-types';
 import { getOllamaConfig, saveOllamaConfig, testOllamaConnection, DEFAULT_OLLAMA_CONFIG } from '../shared/ollama-config';
@@ -1178,7 +1178,17 @@ async function saveFinalProfile(includeWorkAuth: boolean): Promise<void> {
         extractedProfile.workAuth = workAuthData;
       }
     }
-    
+
+    // Normalize the profile before saving — splits middle names out of lastName,
+    // drops phantom work entries without startDate, deduplicates work by company+title.
+    extractedProfile = normalizeProfile(extractedProfile) as any;
+    console.log('[Onboarding] Profile normalized:', {
+      firstName: extractedProfile.personal?.firstName,
+      middleName: (extractedProfile.personal as any)?.middleName,
+      lastName: extractedProfile.personal?.lastName,
+      workEntries: extractedProfile.work?.length,
+    });
+
     // Try to save the profile
     let profileSaved = false;
     try {

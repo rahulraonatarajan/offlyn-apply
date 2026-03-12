@@ -484,20 +484,21 @@ export class GraphMemoryService {
     questionText: string,
     value: string,
     source: AnswerSource,
-    canonicalField: string,
+    canonicalField: string | undefined,
     context?: GraphJobContext
   ): void {
     if (!this.ready) return;
 
-    const questionNode = this.upsertQuestionNode(questionText, canonicalField);
-    const answerNode = this.upsertAnswerNode(value, canonicalField, source);
+    const field = canonicalField && canonicalField !== 'unknown' ? canonicalField : undefined;
+    const questionNode = this.upsertQuestionNode(questionText, field);
+    const answerNode = this.upsertAnswerNode(value, field ?? '', source);
 
     // Connect question to answer
     this.createOrUpdateEdge(questionNode.id, answerNode.id, 'ANSWERED_BY', 1.0);
 
-    // Connect field to question via MAPS_TO
-    if (canonicalField) {
-      const fieldNode = this.upsertFieldNode(canonicalField);
+    // Connect field to question via MAPS_TO — only when we have a real canonical field
+    if (field) {
+      const fieldNode = this.upsertFieldNode(field);
       this.createOrUpdateEdge(fieldNode.id, questionNode.id, 'MAPS_TO', 1.0);
     }
 
@@ -563,7 +564,7 @@ export class GraphMemoryService {
     }
 
     // Also upsert the corrected value as a high-confidence answer
-    const correctedAnswer = this.upsertAnswerNode(correctedValue, canonicalField ?? 'unknown', 'user', 'correction');
+    const correctedAnswer = this.upsertAnswerNode(correctedValue, canonicalField ?? '', 'user', 'correction');
     this.createOrUpdateEdge(questionNode.id, correctedAnswer.id, 'ANSWERED_BY', 1.0);
 
     const payload = correctedAnswer.payload as AnswerPayload;
@@ -738,7 +739,29 @@ export class GraphMemoryService {
       const { canonicalField, questionText, value } = entry;
       if (!value.trim()) continue;
 
+      // Never create 'unknown' field nodes — they pollute the graph by acting as a
+      // catch-all that connects unrelated questions to the same answers.
+      if (!canonicalField || canonicalField === 'unknown') continue;
+
       const questionNode = this.upsertQuestionNode(questionText, canonicalField);
+
+      // For long-form answers: skip if this question already has an answer with
+      // the same value to prevent duplicate nodes on every background startup.
+      const isLongForm =
+        value.length > LONG_FORM_LENGTH_THRESHOLD || LONG_FORM_FIELDS.has(canonicalField);
+
+      if (isLongForm) {
+        const existingAnswerIds = this.indexes.edgesByFrom.get(questionNode.id) ?? [];
+        const alreadyHasThisValue = existingAnswerIds.some(edgeId => {
+          const edge = this.edges.get(edgeId);
+          if (!edge || edge.type !== 'ANSWERED_BY') return false;
+          const answerNode = this.nodes.get(edge.to);
+          if (!answerNode) return false;
+          return (answerNode.payload as AnswerPayload).value === value;
+        });
+        if (alreadyHasThisValue) continue;
+      }
+
       const answerNode = this.upsertAnswerNode(value, canonicalField, 'profile');
       const fieldNode = this.upsertFieldNode(canonicalField);
 

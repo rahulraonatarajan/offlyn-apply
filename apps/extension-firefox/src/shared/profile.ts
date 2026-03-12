@@ -64,25 +64,77 @@ export interface WorkAuthorization {
   currentStatus?: string; // e.g., "US Citizen", "Permanent Resident", "Work Visa", "Student Visa"
 }
 
+/**
+ * Government / travel document fields — used by DS-160, ESTA, TSA PreCheck, etc.
+ * All optional. Never required for job applications.
+ */
+export interface IdentityDocuments {
+  dateOfBirth?: string;          // ISO date: "1995-03-14"
+  placeOfBirth?: string;         // e.g., "Hyderabad, India"
+  nationality?: string;          // e.g., "Indian", "American"
+  countryOfBirth?: string;       // e.g., "India"
+  passportNumber?: string;
+  passportCountry?: string;      // country that issued the passport
+  passportExpiryDate?: string;   // ISO date
+  passportIssueDate?: string;    // ISO date
+  nationalIdNumber?: string;     // e.g., Aadhaar, national ID
+  ssnLast4?: string;             // last 4 digits of SSN (never full SSN)
+  driversLicenseNumber?: string;
+  driversLicenseState?: string;  // e.g., "CA"
+  driversLicenseExpiry?: string; // ISO date
+}
+
+/**
+ * Full address record — used by DMV, tax forms, financial institutions.
+ */
+export interface AddressRecord {
+  line1?: string;       // street number + street name
+  line2?: string;       // apt, suite, unit
+  city?: string;
+  state?: string;       // full name or abbreviation
+  zipCode?: string;
+  country?: string;
+  isMailing?: boolean;  // distinguish physical vs mailing
+}
+
+/**
+ * Emergency contact — used by HR onboarding, medical forms, school enrollment.
+ */
+export interface EmergencyContact {
+  name?: string;
+  relationship?: string;  // e.g., "Spouse", "Parent"
+  phone?: string;
+  email?: string;
+}
+
 export interface UserProfile {
   personal: {
     firstName: string;
     lastName: string;
+    middleName?: string;  // kept separate so lastName-only fields fill correctly
+    preferredName?: string;
+    suffix?: string;      // e.g., "Jr.", "III"
     email: string;
-    phone: string | PhoneDetails;       // supports both string (legacy) and split object
-    location: string | LocationDetails; // supports both string (legacy) and split object
+    phone: string | PhoneDetails;
+    location: string | LocationDetails;
+    /** Structured mailing / home addresses — used by DMV, tax, HR forms */
+    addresses?: AddressRecord[];
   };
   professional: {
     linkedin?: string;
     github?: string;
     portfolio?: string;
     yearsOfExperience?: number;
+    /** Expected / desired salary range */
+    salaryExpectation?: string;
+    /** Notice period at current employer */
+    noticePeriod?: string;
   };
   work: Array<{
     company: string;
     title: string;
-    startDate: string;
-    endDate: string;
+    startDate: string | null;
+    endDate: string | null;
     current: boolean;
     description: string;
   }>;
@@ -94,13 +146,122 @@ export interface UserProfile {
   }>;
   skills: string[];
   summary?: string;
-  resumeText?: string; // Original resume text
-  selfId?: SelfIdentification; // Optional self-identification data
-  workAuth?: WorkAuthorization; // Work authorization and visa sponsorship info
+  resumeText?: string;
+  selfId?: SelfIdentification;
+  workAuth?: WorkAuthorization;
+  /** Government / travel documents — DS-160, DMV, TSA PreCheck, etc. */
+  identity?: IdentityDocuments;
+  /** Emergency contacts — HR onboarding, school enrollment, medical forms */
+  emergencyContacts?: EmergencyContact[];
   lastUpdated: number;
 }
 
 const PROFILE_KEY = 'userProfile';
+
+/**
+ * Normalize a raw parsed profile before it is saved.
+ *
+ * LLMs sometimes return slightly wrong data even with good prompts. This
+ * function is the last line of defense and runs regardless of which parser
+ * produced the data. It is safe to call multiple times (idempotent).
+ *
+ * Rules applied:
+ *  1. Name splitting — if middleName is empty but lastName contains multiple
+ *     words, move everything except the last word into middleName.
+ *  2. Work entry filtering — remove any entry that has no startDate (phantom
+ *     sub-responsibility extracted as a job by the LLM).
+ *  3. Work deduplication — keep only the first occurrence of each company+title.
+ *  4. Work company sanity — if the company field contains the person's own
+ *     full name (common LLM hallucination), drop that entry.
+ *  5. Normalize startDate / endDate to YYYY-MM where easily detectable.
+ */
+export function normalizeProfile(raw: any): UserProfile {
+  const p: any = { ...raw };
+
+  // ── 1. Name splitting ──────────────────────────────────────────────────────
+  if (p.personal) {
+    const firstName = (p.personal.firstName || '').trim();
+    const lastName  = (p.personal.lastName  || '').trim();
+    const middleName = (p.personal.middleName || '').trim();
+
+    if (!middleName && lastName.includes(' ')) {
+      // e.g. "Nishanth Ponukumatla" → middleName:"Nishanth" lastName:"Ponukumatla"
+      const parts = lastName.split(/\s+/);
+      p.personal = {
+        ...p.personal,
+        middleName: parts.slice(0, -1).join(' '),
+        lastName: parts[parts.length - 1],
+      };
+    } else if (!middleName && firstName.includes(' ')) {
+      // Sometimes the LLM puts everything in firstName
+      const parts = firstName.split(/\s+/);
+      if (parts.length >= 3) {
+        p.personal = {
+          ...p.personal,
+          firstName: parts[0],
+          middleName: parts.slice(1, -1).join(' '),
+          lastName: p.personal.lastName || parts[parts.length - 1],
+        };
+      }
+    }
+  }
+
+  // ── 2 & 3 & 4. Work entry cleaning ────────────────────────────────────────
+  if (Array.isArray(p.work)) {
+    const fullName = [
+      p.personal?.firstName,
+      p.personal?.middleName,
+      p.personal?.lastName,
+    ].filter(Boolean).join(' ').toLowerCase().trim();
+
+    // Filter: must have startDate + company + title; company must not be the person's own name
+    const filtered = p.work.filter((job: any) => {
+      if (!job.startDate || !String(job.startDate).trim()) return false;
+      if (!job.company || !job.title) return false;
+      if (fullName && job.company.toLowerCase().trim() === fullName) return false;
+      return true;
+    });
+
+    // Deduplicate by company+title (keep first/oldest occurrence which is usually most detailed)
+    const seen = new Set<string>();
+    p.work = filtered.filter((job: any) => {
+      const key = `${job.company}|${job.title}`.toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  // ── 5. Normalize date formats to YYYY-MM ──────────────────────────────────
+  const MONTH_MAP: Record<string, string> = {
+    jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06',
+    jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12',
+  };
+  const normDate = (d: string | null | undefined): string | null => {
+    if (!d) return null;
+    const s = String(d).trim();
+    if (/^\d{4}-\d{2}$/.test(s)) return s;          // already YYYY-MM
+    if (/^\d{4}$/.test(s)) return `${s}-01`;         // "2020" → "2020-01"
+    // "Jan 2020" or "January 2020"
+    const m = s.match(/([a-zA-Z]+)[.\s]+(\d{4})/);
+    if (m) {
+      const month = MONTH_MAP[m[1].toLowerCase().slice(0,3)] || '01';
+      return `${m[2]}-${month}`;
+    }
+    return s; // leave as-is if unrecognised
+  };
+
+  if (Array.isArray(p.work)) {
+    p.work = p.work.map((job: any) => ({
+      ...job,
+      startDate: normDate(job.startDate),
+      endDate: job.current ? null : normDate(job.endDate),
+    }));
+  }
+
+  p.lastUpdated = p.lastUpdated ?? Date.now();
+  return p as UserProfile;
+}
 
 /**
  * Get stored user profile

@@ -496,7 +496,7 @@ browser.runtime.onMessage.addListener(async (message: unknown, sender: browser.r
         msg.questionText ?? '',
         msg.value ?? '',
         msg.source ?? 'profile',
-        msg.canonicalField ?? 'unknown',
+        msg.canonicalField ?? undefined,
         {
           company: msg.context?.company,
           jobTitle: msg.context?.jobTitle,
@@ -925,67 +925,129 @@ function classifySmartFillResponse(
  * Question texts are chosen to match common ATS label wording so similarity
  * lookups fire even on first-visit forms.
  */
+/**
+ * Build profile seed entries for the graph memory.
+ *
+ * Design rules that keep the graph clean for ANY form type (job apps, DMV,
+ * DS-160, financial, HR onboarding, etc.):
+ *
+ *  1. Every entry MUST have a real canonicalField — no 'unknown' fallback.
+ *  2. Work entries without a startDate are phantom parser artifacts; skip them.
+ *  3. Deduplicate work entries by company+title to prevent multiple identical nodes.
+ *  4. Only seed the most-recent dated job as current_role/current_company so the
+ *     graph doesn't accumulate stale entries on every startup.
+ *  5. Identity / document fields (DOB, passport, address) are included when present
+ *     so the system can fill DMV/DS-160 fields without user re-entry.
+ */
 function buildProfileSeedEntries(profile: UserProfile): Array<{ canonicalField: string; questionText: string; value: string }> {
   const p = profile;
   const phone = formatPhone(p.personal.phone);
   const location = formatLocation(p.personal.location);
-  const fullName = [p.personal.firstName, p.personal.lastName].filter(Boolean).join(' ');
-  const currentRole = (p.professional as any)?.currentRole ?? '';
-  const yearsExp = p.professional?.yearsOfExperience != null ? String(p.professional.yearsOfExperience) : '';
 
+  // Build full name correctly — keep middleName out of lastName
+  const nameParts = [p.personal.firstName, p.personal.middleName, p.personal.lastName].filter(Boolean);
+  const fullName = nameParts.join(' ');
+
+  // ── Personal identity ──────────────────────────────────────────────────────
   const entries: Array<{ canonicalField: string; questionText: string; value: string }> = [
-    { canonicalField: 'first_name',          questionText: 'What is your first name?',                   value: p.personal.firstName ?? '' },
-    { canonicalField: 'last_name',           questionText: 'What is your last name?',                    value: p.personal.lastName ?? '' },
-    { canonicalField: 'full_name',           questionText: 'What is your full name?',                    value: fullName },
-    { canonicalField: 'email',               questionText: 'What is your email address?',                value: p.personal.email ?? '' },
-    { canonicalField: 'phone',               questionText: 'What is your phone number?',                 value: phone },
-    { canonicalField: 'location',            questionText: 'What is your current location?',             value: location },
-    { canonicalField: 'linkedin',            questionText: 'What is your LinkedIn profile URL?',         value: p.professional?.linkedin ?? '' },
-    { canonicalField: 'github',              questionText: 'What is your GitHub profile URL?',           value: p.professional?.github ?? '' },
-    { canonicalField: 'portfolio',           questionText: 'What is your portfolio or website URL?',     value: p.professional?.portfolio ?? '' },
-    { canonicalField: 'current_role',        questionText: 'What is your current job title?',            value: currentRole },
-    { canonicalField: 'years_of_experience', questionText: 'How many years of experience do you have?',  value: yearsExp },
+    { canonicalField: 'first_name',    questionText: 'What is your first name?',      value: p.personal.firstName ?? '' },
+    { canonicalField: 'last_name',     questionText: 'What is your last name?',       value: p.personal.lastName ?? '' },
+    { canonicalField: 'full_name',     questionText: 'What is your full name?',       value: fullName },
+    { canonicalField: 'email',         questionText: 'What is your email address?',   value: p.personal.email ?? '' },
+    { canonicalField: 'phone',         questionText: 'What is your phone number?',    value: phone },
+    { canonicalField: 'location',      questionText: 'What is your current location?', value: location },
   ];
 
-  // Work authorization
+  if (p.personal.middleName) {
+    entries.push({ canonicalField: 'middle_name', questionText: 'What is your middle name?', value: p.personal.middleName });
+  }
+  if (p.personal.preferredName) {
+    entries.push({ canonicalField: 'preferred_name', questionText: 'What is your preferred name?', value: p.personal.preferredName });
+  }
+
+  // ── Address (used by DMV, tax, HR forms) ────────────────────────────────
+  const primaryAddress = p.personal.addresses?.[0];
+  if (primaryAddress) {
+    if (primaryAddress.line1)   entries.push({ canonicalField: 'address_line1', questionText: 'What is your street address?',      value: primaryAddress.line1 });
+    if (primaryAddress.line2)   entries.push({ canonicalField: 'address_line2', questionText: 'Apartment, suite, or unit number?', value: primaryAddress.line2 });
+    if (primaryAddress.city)    entries.push({ canonicalField: 'city',          questionText: 'What city do you live in?',          value: primaryAddress.city });
+    if (primaryAddress.state)   entries.push({ canonicalField: 'state',         questionText: 'What state do you live in?',         value: primaryAddress.state });
+    if (primaryAddress.zipCode) entries.push({ canonicalField: 'zip_code',      questionText: 'What is your ZIP code?',             value: primaryAddress.zipCode });
+    if (primaryAddress.country) entries.push({ canonicalField: 'country',       questionText: 'What country do you live in?',       value: primaryAddress.country });
+  }
+
+  // ── Professional links ───────────────────────────────────────────────────
+  if (p.professional?.linkedin)  entries.push({ canonicalField: 'linkedin',  questionText: 'What is your LinkedIn profile URL?',    value: p.professional.linkedin });
+  if (p.professional?.github)    entries.push({ canonicalField: 'github',    questionText: 'What is your GitHub profile URL?',      value: p.professional.github });
+  if (p.professional?.portfolio) entries.push({ canonicalField: 'portfolio', questionText: 'What is your portfolio or website URL?', value: p.professional.portfolio });
+
+  if (p.professional?.yearsOfExperience != null) {
+    entries.push({ canonicalField: 'years_of_experience', questionText: 'How many years of experience do you have?', value: String(p.professional.yearsOfExperience) });
+  }
+  if (p.professional?.salaryExpectation) {
+    entries.push({ canonicalField: 'salary_expectation', questionText: 'What is your expected salary?', value: p.professional.salaryExpectation });
+  }
+  if (p.professional?.noticePeriod) {
+    entries.push({ canonicalField: 'notice_period', questionText: 'What is your notice period?', value: p.professional.noticePeriod });
+  }
+
+  // ── Work history — only dated, deduplicated entries ──────────────────────
+  // A "real" job entry has at least a startDate. Sub-responsibility bullets
+  // extracted by the LLM parser have no dates and should not be seeded.
+  const seen = new Set<string>();
+  const datedJobs = (p.work ?? []).filter(w => w.startDate);
+  for (const job of datedJobs) {
+    const key = `${job.company}|${job.title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+  }
+
+  // Pick the most recent dated job as the canonical current_role / current_company
+  const latestJob = datedJobs[0];
+  if (latestJob?.title)   entries.push({ canonicalField: 'current_role',    questionText: 'What is your current job title?',                  value: latestJob.title });
+  if (latestJob?.company) entries.push({ canonicalField: 'current_company', questionText: 'What is your current or most recent employer?',    value: latestJob.company });
+
+  // ── Work authorization ────────────────────────────────────────────────────
   if (p.workAuth) {
-    entries.push({
-      canonicalField: 'requires_sponsorship',
-      questionText: 'Do you require visa sponsorship?',
-      value: p.workAuth.requiresSponsorship ? 'Yes' : 'No',
-    });
-    entries.push({
-      canonicalField: 'legally_authorized',
-      questionText: 'Are you legally authorized to work in the United States?',
-      value: p.workAuth.legallyAuthorized ? 'Yes' : 'No',
-    });
+    entries.push({ canonicalField: 'requires_sponsorship', questionText: 'Do you require visa sponsorship?',                               value: p.workAuth.requiresSponsorship ? 'Yes' : 'No' });
+    entries.push({ canonicalField: 'legally_authorized',   questionText: 'Are you legally authorized to work in the United States?',       value: p.workAuth.legallyAuthorized ? 'Yes' : 'No' });
+    if (p.workAuth.currentStatus)        entries.push({ canonicalField: 'immigration_status',    questionText: 'What is your current immigration or work authorization status?', value: p.workAuth.currentStatus });
+    if (p.workAuth.visaType)             entries.push({ canonicalField: 'visa_type',             questionText: 'What type of visa do you hold?',                                value: p.workAuth.visaType });
+    if (p.workAuth.sponsorshipTimeline)  entries.push({ canonicalField: 'sponsorship_timeline',  questionText: 'When would you need sponsorship?',                              value: p.workAuth.sponsorshipTimeline });
   }
 
-  // Most recent job title and company
-  const latestJob = p.work?.[0];
-  if (latestJob?.title) {
-    entries.push({ canonicalField: 'current_role', questionText: 'What is your most recent job title?', value: latestJob.title });
-  }
-  if (latestJob?.company) {
-    entries.push({ canonicalField: 'current_company', questionText: 'What is your current or most recent employer?', value: latestJob.company });
+  // ── Identity documents (DS-160, DMV, TSA PreCheck, ESTA, etc.) ──────────
+  if (p.identity) {
+    const id = p.identity;
+    if (id.dateOfBirth)          entries.push({ canonicalField: 'date_of_birth',           questionText: 'What is your date of birth?',                         value: id.dateOfBirth });
+    if (id.placeOfBirth)         entries.push({ canonicalField: 'place_of_birth',          questionText: 'What is your place of birth?',                        value: id.placeOfBirth });
+    if (id.nationality)          entries.push({ canonicalField: 'nationality',             questionText: 'What is your nationality?',                            value: id.nationality });
+    if (id.countryOfBirth)       entries.push({ canonicalField: 'country_of_birth',        questionText: 'What is your country of birth?',                      value: id.countryOfBirth });
+    if (id.passportNumber)       entries.push({ canonicalField: 'passport_number',         questionText: 'What is your passport number?',                       value: id.passportNumber });
+    if (id.passportCountry)      entries.push({ canonicalField: 'passport_country',        questionText: 'Which country issued your passport?',                  value: id.passportCountry });
+    if (id.passportExpiryDate)   entries.push({ canonicalField: 'passport_expiry',         questionText: 'When does your passport expire?',                     value: id.passportExpiryDate });
+    if (id.passportIssueDate)    entries.push({ canonicalField: 'passport_issue_date',     questionText: 'When was your passport issued?',                      value: id.passportIssueDate });
+    if (id.ssnLast4)             entries.push({ canonicalField: 'ssn_last4',               questionText: 'What are the last 4 digits of your Social Security Number?', value: id.ssnLast4 });
+    if (id.driversLicenseNumber) entries.push({ canonicalField: 'drivers_license_number',  questionText: "What is your driver's license number?",               value: id.driversLicenseNumber });
+    if (id.driversLicenseState)  entries.push({ canonicalField: 'drivers_license_state',   questionText: "Which state issued your driver's license?",           value: id.driversLicenseState });
+    if (id.driversLicenseExpiry) entries.push({ canonicalField: 'drivers_license_expiry',  questionText: "When does your driver's license expire?",             value: id.driversLicenseExpiry });
   }
 
-  // Skills summary
+  // ── Emergency contacts ────────────────────────────────────────────────────
+  const ec = p.emergencyContacts?.[0];
+  if (ec) {
+    if (ec.name)         entries.push({ canonicalField: 'emergency_contact_name',         questionText: 'Emergency contact name?',                  value: ec.name });
+    if (ec.relationship) entries.push({ canonicalField: 'emergency_contact_relationship', questionText: 'Emergency contact relationship?',           value: ec.relationship });
+    if (ec.phone)        entries.push({ canonicalField: 'emergency_contact_phone',        questionText: 'Emergency contact phone number?',          value: ec.phone });
+    if (ec.email)        entries.push({ canonicalField: 'emergency_contact_email',        questionText: 'Emergency contact email address?',         value: ec.email });
+  }
+
+  // ── Skills & summary ─────────────────────────────────────────────────────
   if (p.skills?.length) {
-    entries.push({
-      canonicalField: 'skills',
-      questionText: 'What are your key skills?',
-      value: p.skills.join(', '),
-    });
+    entries.push({ canonicalField: 'skills', questionText: 'What are your key skills?', value: p.skills.join(', ') });
   }
-
-  // Professional summary
   if (p.summary) {
-    entries.push({
-      canonicalField: 'summary',
-      questionText: 'Please provide a brief professional summary.',
-      value: p.summary,
-    });
+    entries.push({ canonicalField: 'summary', questionText: 'Please provide a brief professional summary.', value: p.summary });
   }
 
   return entries.filter(e => e.value.trim() !== '');
