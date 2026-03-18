@@ -9,7 +9,7 @@ setlocal EnableDelayedExpansion
 set HOST_NAME=ai.offlyn.helper
 set OFFLYN_DIR=%USERPROFILE%\.offlyn
 set HOST_SCRIPT=%OFFLYN_DIR%\helper.ps1
-set RAW_BASE=https://raw.githubusercontent.com/joelnishanth/offlyn-apply/main/scripts/native-host
+set RAW_BASE=https://raw.githubusercontent.com/joelnishanth/offlyn-apply/feat/graph-memory-layer/scripts/native-host
 set CHROME_EXT_ID=bjllpojjllhfghiemokcoknfmhpmfbph
 set FIREFOX_EXT_ID={e0857c2d-15a6-4d0c-935e-57761715dc3d}
 

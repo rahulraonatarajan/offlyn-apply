@@ -17,7 +17,7 @@ import platform
 import os
 
 SCRIPT_BASE = (
-    "https://raw.githubusercontent.com/joelnishanth/offlyn-apply/main"
+    "https://raw.githubusercontent.com/joelnishanth/offlyn-apply/feat/graph-memory-layer"
     "/scripts/setup-ollama"
 )
 VERSION = "1.0.0"

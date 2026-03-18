@@ -7,7 +7,7 @@
 #   { "cmd": "run_setup" }  -> { "type": "done", "ok": true/false, "output": "..." }
 
 $VERSION = "1.0.0"
-$SCRIPT_BASE = "https://raw.githubusercontent.com/joelnishanth/offlyn-apply/main/scripts/setup-ollama"
+$SCRIPT_BASE = "https://raw.githubusercontent.com/joelnishanth/offlyn-apply/feat/graph-memory-layer/scripts/setup-ollama"
 
 function Read-NativeMessage {
     $stdin = [Console]::OpenStandardInput()
