@@ -441,7 +441,7 @@ async function checkOllamaConnection(): Promise<void> {
 // ── Native Messaging helpers ──────────────────────────────────────────────
 
 const HELPER_INSTALL_BASE =
-  'https://raw.githubusercontent.com/joelnishanth/offlyn-apply/feat/graph-memory-layer/scripts/native-host';
+  'https://raw.githubusercontent.com/joelnishanth/offlyn-apply/main/scripts/native-host';
 
 function detectOS(): 'mac' | 'windows' | 'linux' {
   const ua = navigator.userAgent.toLowerCase();
