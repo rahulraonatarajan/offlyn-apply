@@ -2007,16 +2007,23 @@
             <div id="helperNotInstalled" class="ollama-setup-substate">
               <div class="setup-oneliner-card">
                 <h3 style="font-size:14px;font-weight:700;color:#1e2a3a;margin-bottom:6px;">Step 1 of 2 — Install the Offlyn Helper (one-time)</h3>
-                <p style="font-size:13px;color:#475569;margin-bottom:12px;">A tiny helper lets the extension set everything up for you automatically. Run this command once in a terminal, then you're done with the terminal forever.</p>
-                <p id="helperTerminalHint" style="font-size:12px;color:#64748b;margin-bottom:8px;"></p>
-                <div class="code-cmd" style="margin-bottom:10px;">
-                  <code id="helperInstallCmd" style="font-size:12px;word-break:break-all;"></code>
-                  <button class="btn-copy-cmd" id="copyHelperCmd">Copy</button>
-                </div>
-                <p style="font-size:12px;color:#64748b;margin-bottom:12px;">After it finishes, come back here and click the button below.</p>
+                <p style="font-size:13px;color:#475569;margin-bottom:16px;">Download and run the installer — it takes about 10 seconds and just needs your Mac password. No terminal required.</p>
+
+                <a href="https://github.com/joelnishanth/offlyn-apply/releases/download/v0.4.0/offlyn-helper.pkg"
+                   target="_blank"
+                   class="btn btn-primary"
+                   style="display:inline-flex;align-items:center;gap:8px;font-size:14px;padding:10px 20px;text-decoration:none;margin-bottom:14px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download Installer
+                </a>
+
+                <p style="font-size:12px;color:#64748b;margin-bottom:14px;">
+                  After the installer finishes, come back and click below.
+                </p>
+
                 <button class="btn btn-secondary" id="checkHelperBtn" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:8px 16px;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                  Helper Installed — Check Again
+                  I Installed It — Check Again
                 </button>
               </div>
             </div>
