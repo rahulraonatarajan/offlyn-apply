@@ -431,6 +431,8 @@ async function checkOllamaConnection(): Promise<void> {
 
 const HELPER_INSTALL_BASE =
   'https://raw.githubusercontent.com/joelnishanth/offlyn-apply/main/scripts/native-host';
+const HELPER_PKG_URL =
+  'https://github.com/joelnishanth/offlyn-apply/releases/download/v0.5.0/offlyn-helper.pkg';
 
 function detectOS(): 'mac' | 'windows' | 'linux' {
   const ua = navigator.userAgent.toLowerCase();
@@ -452,6 +454,38 @@ function getHelperTerminalHint(): string {
   if (os === 'windows') return 'Open PowerShell (Start → search "PowerShell") → paste → Enter';
   if (os === 'mac') return 'Open Terminal (Cmd+Space → type "Terminal" → Enter) → paste → Enter';
   return 'Open a terminal → paste → Enter';
+}
+
+const DOWNLOAD_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+
+function populateHelperInstructions(): void {
+  const container = document.getElementById('helperInstallInstructions');
+  if (!container) return;
+
+  const os = detectOS();
+
+  if (os === 'mac') {
+    container.innerHTML = `
+      <p style="font-size:13px;color:#475569;margin-bottom:16px;">Download and run the installer — it takes about 10 seconds and just needs your Mac password. No terminal required.</p>
+      <a href="${HELPER_PKG_URL}"
+         target="_blank"
+         class="btn btn-primary"
+         style="display:inline-flex;align-items:center;gap:8px;font-size:14px;padding:10px 20px;text-decoration:none;margin-bottom:14px;">
+        ${DOWNLOAD_SVG}
+        Download Installer
+      </a>
+    `;
+  } else {
+    const cmd = getHelperInstallCommand();
+    const hint = getHelperTerminalHint();
+    container.innerHTML = `
+      <p style="font-size:13px;color:#475569;margin-bottom:10px;">${hint}</p>
+      <div style="background:#1e293b;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <code id="helperInstallCmd" style="flex:1;font-size:12px;color:#e2e8f0;word-break:break-all;font-family:monospace;">${cmd}</code>
+        <button id="copyHelperCmd" style="background:#334155;border:none;color:#e2e8f0;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;">Copy</button>
+      </div>
+    `;
+  }
 }
 
 async function checkNativeHelper(): Promise<boolean> {
@@ -508,11 +542,7 @@ function updateHelperSubstate(helperInstalled: boolean): void {
 }
 
 function setupOllamaStepListeners(): void {
-  // Populate OS-specific helper install command
-  const cmdEl = document.getElementById('helperInstallCmd');
-  const hintEl = document.getElementById('helperTerminalHint');
-  if (cmdEl) cmdEl.textContent = getHelperInstallCommand();
-  if (hintEl) hintEl.textContent = getHelperTerminalHint();
+  populateHelperInstructions();
 
   // Copy helper install command
   document.getElementById('copyHelperCmd')?.addEventListener('click', () => {
@@ -560,22 +590,44 @@ function setupOllamaStepListeners(): void {
     const helperReady = await checkNativeHelper();
 
     if (!helperReady) {
-      // No helper installed — replace button with pkg download prompt
       const corsWrap = document.getElementById('runCorsFixBtn')?.parentElement;
       if (corsWrap) {
-        corsWrap.innerHTML = `
-          <p style="font-size:13px;color:#92400e;margin-bottom:10px;">
-            <strong>To fix CORS automatically</strong>, install the Offlyn Helper first — it configures Ollama permissions in one step.
-          </p>
-          <a href="https://github.com/joelnishanth/offlyn-apply/releases/download/v0.5.0/offlyn-helper.pkg"
-             target="_blank"
-             class="btn btn-primary"
-             style="display:inline-flex;align-items:center;gap:8px;font-size:13px;padding:9px 16px;text-decoration:none;margin-bottom:10px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Download Installer
-          </a>
-          <p style="font-size:12px;color:#78350f;">After the installer finishes, click <strong>Re-test Connection</strong> below.</p>
-        `;
+        const os = detectOS();
+        if (os === 'mac') {
+          corsWrap.innerHTML = `
+            <p style="font-size:13px;color:#92400e;margin-bottom:10px;">
+              <strong>To fix CORS automatically</strong>, install the Offlyn Helper first — it configures Ollama permissions in one step.
+            </p>
+            <a href="${HELPER_PKG_URL}"
+               target="_blank"
+               class="btn btn-primary"
+               style="display:inline-flex;align-items:center;gap:8px;font-size:13px;padding:9px 16px;text-decoration:none;margin-bottom:10px;">
+              ${DOWNLOAD_SVG}
+              Download Installer
+            </a>
+            <p style="font-size:12px;color:#78350f;">After the installer finishes, click <strong>Re-test Connection</strong> below.</p>
+          `;
+        } else {
+          const cmd = getHelperInstallCommand();
+          const hint = getHelperTerminalHint();
+          corsWrap.innerHTML = `
+            <p style="font-size:13px;color:#92400e;margin-bottom:10px;">
+              <strong>To fix CORS automatically</strong>, install the Offlyn Helper first — it configures Ollama permissions in one step.
+            </p>
+            <p style="font-size:12px;color:#78350f;margin-bottom:8px;">${hint}</p>
+            <div style="background:#1e293b;border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+              <code style="flex:1;font-size:12px;color:#e2e8f0;word-break:break-all;font-family:monospace;">${cmd}</code>
+              <button id="copyCorsFixCmd" style="background:#334155;border:none;color:#e2e8f0;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;">Copy</button>
+            </div>
+            <p style="font-size:12px;color:#78350f;">After setup completes, click <strong>Re-test Connection</strong> below.</p>
+          `;
+          document.getElementById('copyCorsFixCmd')?.addEventListener('click', () => {
+            navigator.clipboard.writeText(cmd).then(() => {
+              const copyBtn = document.getElementById('copyCorsFixCmd');
+              if (copyBtn) { const orig = copyBtn.textContent; copyBtn.textContent = 'Copied!'; setTimeout(() => { if (copyBtn) copyBtn.textContent = orig; }, 1500); }
+            }).catch(() => {});
+          });
+        }
       }
       return;
     }

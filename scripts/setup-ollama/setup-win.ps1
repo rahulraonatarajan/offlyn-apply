@@ -53,7 +53,6 @@ for ($i = 0; $i -lt 30; $i++) {
 
 if (-not $ready) {
     Write-Host "ERROR: Ollama did not start in time. Please start it manually and re-run this script."
-    Read-Host "Press Enter to close"
     exit 1
 }
 Write-Host "OK Ollama is running"
@@ -83,4 +82,3 @@ Write-Host "  Return to the Offlyn extension and click"
 Write-Host "  'Test Connection' to verify."
 Write-Host "  -----------------------------------------"
 Write-Host ""
-Read-Host "Press Enter to close this window"
