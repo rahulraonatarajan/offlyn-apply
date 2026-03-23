@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.png" alt="Offlyn Apply" width="320" />
+  <img src="apps/extension-chrome/public/icons/logo-full-400w.png" alt="Offlyn Apply" width="320" />
   <h3>Privacy-first job application assistant for Chrome & Firefox</h3>
   <p>Auto-fill forms · AI cover letters · Local Ollama · Zero cloud · Zero tracking</p>
 
