@@ -435,6 +435,8 @@ const HELPER_INSTALL_BASE =
   'https://raw.githubusercontent.com/joelnishanth/offlyn-apply/main/scripts/native-host';
 const HELPER_PKG_URL =
   'https://github.com/joelnishanth/offlyn-apply/releases/download/v0.5.0/offlyn-helper.pkg';
+const HELPER_WIN_BAT_URL =
+  'https://github.com/joelnishanth/offlyn-apply/releases/download/v0.5.0/offlyn-helper-install.bat';
 
 function detectOS(): 'mac' | 'windows' | 'linux' {
   const ua = navigator.userAgent.toLowerCase();
@@ -470,6 +472,17 @@ function populateHelperInstructions(): void {
     container.innerHTML = `
       <p style="font-size:13px;color:#475569;margin-bottom:16px;">Download and run the installer — it takes about 10 seconds and just needs your Mac password. No terminal required.</p>
       <a href="${HELPER_PKG_URL}"
+         target="_blank"
+         class="btn btn-primary"
+         style="display:inline-flex;align-items:center;gap:8px;font-size:14px;padding:10px 20px;text-decoration:none;margin-bottom:14px;">
+        ${DOWNLOAD_SVG}
+        Download Installer
+      </a>
+    `;
+  } else if (os === 'windows') {
+    container.innerHTML = `
+      <p style="font-size:13px;color:#475569;margin-bottom:16px;">Download and double-click the installer — it takes about 10 seconds. No terminal required.</p>
+      <a href="${HELPER_WIN_BAT_URL}"
          target="_blank"
          class="btn btn-primary"
          style="display:inline-flex;align-items:center;gap:8px;font-size:14px;padding:10px 20px;text-decoration:none;margin-bottom:14px;">
@@ -602,6 +615,20 @@ function setupOllamaStepListeners(): void {
               <strong>To fix CORS automatically</strong>, install the Offlyn Helper first — it configures Ollama permissions in one step.
             </p>
             <a href="${HELPER_PKG_URL}"
+               target="_blank"
+               class="btn btn-primary"
+               style="display:inline-flex;align-items:center;gap:8px;font-size:13px;padding:9px 16px;text-decoration:none;margin-bottom:10px;">
+              ${DOWNLOAD_SVG}
+              Download Installer
+            </a>
+            <p style="font-size:12px;color:#78350f;">After the installer finishes, click <strong>Re-test Connection</strong> below.</p>
+          `;
+        } else if (os === 'windows') {
+          corsWrap.innerHTML = `
+            <p style="font-size:13px;color:#92400e;margin-bottom:10px;">
+              <strong>To fix CORS automatically</strong>, install the Offlyn Helper first — it configures Ollama permissions in one step.
+            </p>
+            <a href="${HELPER_WIN_BAT_URL}"
                target="_blank"
                class="btn btn-primary"
                style="display:inline-flex;align-items:center;gap:8px;font-size:13px;padding:9px 16px;text-decoration:none;margin-bottom:10px;">
